@@ -31,7 +31,7 @@ func (k AdminService) adminRealmsPath(ctx context.Context, bits ...string) (stri
 
 func (k *AdminService) callAdminRealms(ctx context.Context, method, requestPath string, body interface{}, mutators ...RequestMutator) (*http.Response, error) {
 	var err error
-	if ctx, err = k.c.requireAllContextValues(ctx); err != nil {
+	if ctx, err = k.c.RequireAllContextValues(ctx); err != nil {
 		return nil, err
 	}
 	requestPath, err = k.adminRealmsPath(ctx, requestPath)
@@ -44,7 +44,7 @@ func (k *AdminService) callAdminRealms(ctx context.Context, method, requestPath 
 func (k *AdminService) callAdminRealmsRequireOK(ctx context.Context, method, requestPath string, body interface{}, mutators ...RequestMutator) (*http.Response, error) {
 	var err error
 
-	if ctx, err = k.c.requireAllContextValues(ctx); err != nil {
+	if ctx, err = k.c.RequireAllContextValues(ctx); err != nil {
 		return nil, err
 	}
 	if requestPath, err = k.adminRealmsPath(ctx, requestPath); err != nil {

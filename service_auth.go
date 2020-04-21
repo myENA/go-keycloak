@@ -42,7 +42,7 @@ func (k *baseService) RealmIssuerConfiguration(ctx context.Context) (*RealmIssue
 		ic          *RealmIssuerConfiguration
 		err         error
 	)
-	if ctx, err = k.c.requireRealm(ctx); err != nil {
+	if ctx, err = k.c.RequireRealm(ctx); err != nil {
 		return nil, err
 	}
 	if requestPath, err = k.realmsPath(ctx); err != nil {
@@ -67,7 +67,7 @@ func (k *baseService) OpenIDConfiguration(ctx context.Context) (*OpenIDConfigura
 		oidc        *OpenIDConfiguration
 		err         error
 	)
-	if ctx, err = k.c.requireRealm(ctx); err != nil {
+	if ctx, err = k.c.RequireRealm(ctx); err != nil {
 		return nil, err
 	}
 	if requestPath, err = k.realmsPath(ctx, kcPathOIDC); err != nil {
@@ -92,7 +92,7 @@ func (k *baseService) UMA2Configuration(ctx context.Context) (*UMA2Configuration
 		uma2c       *UMA2Configuration
 		err         error
 	)
-	if ctx, err = k.c.requireRealm(ctx); err != nil {
+	if ctx, err = k.c.RequireRealm(ctx); err != nil {
 		return nil, err
 	}
 	if requestPath, err = k.realmsPath(ctx, kcPathUMA2C); err != nil {
@@ -117,7 +117,7 @@ func (k *baseService) OpenIDConnectToken(ctx context.Context, req OpenIDConnectT
 		token       *OpenIDConnectToken
 		err         error
 	)
-	if ctx, err = k.c.requireRealm(ctx); err != nil {
+	if ctx, err = k.c.RequireRealm(ctx); err != nil {
 		return nil, err
 	}
 	if requestPath, err = k.realmsPath(ctx, confidentialClientTokenBits...); err != nil {
@@ -149,7 +149,7 @@ func (k *baseService) ParseToken(ctx context.Context, rawToken string, claimsTyp
 		jwtToken *jwt.Token
 		err      error
 	)
-	if ctx, err = k.c.requireRealm(ctx); err != nil {
+	if ctx, err = k.c.RequireRealm(ctx); err != nil {
 		return nil, err
 	}
 	ctx = IssuerAddressContext(ctx, k.c.IssuerAddress())
@@ -173,7 +173,7 @@ func (k *baseService) ClientEntitlement(ctx context.Context, clientID string, cl
 	)
 
 	// construct context fully, including token, realm, and issuer address
-	if ctx, err = k.c.requireAllContextValues(ctx); err != nil {
+	if ctx, err = k.c.RequireAllContextValues(ctx); err != nil {
 		return nil, err
 	}
 	ctx = IssuerAddressContext(ctx, k.c.IssuerAddress())
@@ -221,7 +221,7 @@ func (k *baseService) realmsPath(ctx context.Context, bits ...string) (string, e
 
 func (k *baseService) callRealms(ctx context.Context, method, requestPath string, body interface{}, mutators ...RequestMutator) (*http.Response, error) {
 	var err error
-	if ctx, err = k.c.requireAllContextValues(ctx); err != nil {
+	if ctx, err = k.c.RequireAllContextValues(ctx); err != nil {
 		return nil, err
 	}
 	requestPath, err = k.realmsPath(ctx, requestPath)
@@ -233,7 +233,7 @@ func (k *baseService) callRealms(ctx context.Context, method, requestPath string
 
 func (k *baseService) callRealmsRequireOK(ctx context.Context, method, requestPath string, body interface{}, mutators ...RequestMutator) (*http.Response, error) {
 	var err error
-	if ctx, err = k.c.requireAllContextValues(ctx); err != nil {
+	if ctx, err = k.c.RequireAllContextValues(ctx); err != nil {
 		return nil, err
 	}
 	requestPath, err = k.realmsPath(ctx, requestPath)

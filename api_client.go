@@ -363,18 +363,18 @@ func (c *APIClient) CallRequireOK(ctx context.Context, method, requestPath strin
 	return resp, nil
 }
 
-func (c *APIClient) requireRealm(ctx context.Context) (context.Context, error) {
+func (c *APIClient) RequireRealm(ctx context.Context) (context.Context, error) {
 	return c.RealmProvider().SetRealmValue(ctx)
 }
 
-func (c *APIClient) requireToken(ctx context.Context) (context.Context, error) {
+func (c *APIClient) RequireToken(ctx context.Context) (context.Context, error) {
 	return c.TokenProvider().SetTokenValue(ctx, c)
 }
 
-func (c *APIClient) requireAllContextValues(ctx context.Context) (context.Context, error) {
-	if ctx, err := c.requireRealm(ctx); err != nil {
+func (c *APIClient) RequireAllContextValues(ctx context.Context) (context.Context, error) {
+	if ctx, err := c.RequireRealm(ctx); err != nil {
 		return nil, err
-	} else if ctx, err = c.requireToken(ctx); err != nil {
+	} else if ctx, err = c.RequireToken(ctx); err != nil {
 		return nil, err
 	} else {
 		return ctx, nil
