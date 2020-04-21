@@ -142,7 +142,7 @@ func defaultZerologWriter(w *zerolog.ConsoleWriter) {
 func DefaultZerologLogger() zerolog.Logger {
 	return zerolog.New(zerolog.NewConsoleWriter(defaultZerologWriter)).
 		With().
-		Str("component", "aaa-client").
+		Str("component", "keycloak-client").
 		Timestamp().
 		Logger()
 }
