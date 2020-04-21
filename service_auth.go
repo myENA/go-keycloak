@@ -162,11 +162,10 @@ func (k *baseService) ParseToken(ctx context.Context, rawToken string, claimsTyp
 // ClientEntitlement will attempt to call the pre-uma2 entitlement endpoint to return a Requesting Party Token
 // containing details about what aspects of the provided clientID the token for this request has access to, if any.
 // DEPRECATED: use the newer introspection workflow for  instances newer than 3.4
-func (k *baseService) ClientEntitlement(ctx context.Context, clientID string) (*RequestingPartyToken, error) {
+func (k *baseService) ClientEntitlement(ctx context.Context, clientID string, claimsType jwt.Claims) (*jwt.Token, error) {
 	var (
-		resp   *http.Response
-		parsed *jwt.Token
-		err    error
+		resp *http.Response
+		err  error
 
 		rptResp = new(struct {
 			RPT string `json:"rpt"`
@@ -186,7 +185,7 @@ func (k *baseService) ClientEntitlement(ctx context.Context, clientID string) (*
 	}
 
 	// execute request.
-	if resp, err = k.c.CallRequireOK(ctx, http.MethodGet, requestPath, nil); err != nil {
+	if resp, err = k.c.CallRequireOK(ctx, http.MethodGet, requestPath, claimsType); err != nil {
 		return nil, err
 	}
 
@@ -194,11 +193,7 @@ func (k *baseService) ClientEntitlement(ctx context.Context, clientID string) (*
 		return nil, err
 	}
 
-	if parsed, err = k.ParseToken(ctx, rptResp.RPT, new(RequestingPartyToken)); err != nil {
-		return nil, err
-	}
-
-	return parsed.Claims.(*RequestingPartyToken), nil
+	return k.ParseToken(ctx, rptResp.RPT, claimsType)
 }
 
 // TODO: add this as method on TokenParser?

@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"strconv"
 	"time"
-
-	"github.com/dgrijalva/jwt-go"
 )
 
 type KeyValuesMap map[string][]string
@@ -278,77 +276,6 @@ type OpenIDConnectToken struct {
 	SessionState     string `json:"session_state"`
 }
 
-type ResourceAccess struct {
-	Roles []string `json:"roles"`
-}
-
-type AccessToken struct {
-	jwt.StandardClaims                            // aud, exp, jti, iat, iss, nbf, sub
-	Name               string                     `json:"name"`
-	PreferredUsername  string                     `json:"preferred_username"`
-	ResourceAccess     map[string]*ResourceAccess `json:"resource_access"`
-	Acr                string                     `json:"acr"`
-	FamilyName         string                     `json:"family_name"`
-	Azp                string                     `json:"azp"`
-	AuthTime           int                        `json:"auth_time"`
-	SessionState       string                     `json:"session_state"`
-	Email              string                     `json:"email"`
-	AllowedOrigins     []string                   `json:"allowed-origins"`
-	RealmAccess        *ResourceAccess            `json:"realm_access"`
-	Typ                string                     `json:"typ"`
-	ClientSession      string                     `json:"client_session"`
-	GivenName          string                     `json:"given_name"`
-}
-
-type AuthorizationPermission struct {
-	Scopes          []string `json:"scopes"`
-	ResourceSetID   string   `json:"resource_set_id"`
-	ResourceSetName string   `json:"resource_set_name"`
-}
-
-type Authorization struct {
-	Permissions []*AuthorizationPermission `json:"permissions"`
-}
-
-type RequestingPartyToken struct {
-	jwt.StandardClaims                            // aud, exp, jti, iat, iss, nbf, sub
-	Typ                string                     `json:"typ"`
-	Azp                string                     `json:"azp"`
-	AuthTime           int                        `json:"auth_time"`
-	SessionState       string                     `json:"session_state"`
-	Name               string                     `json:"name"`
-	PreferredUsername  string                     `json:"preferred_username"`
-	Email              string                     `json:"email"`
-	Acr                string                     `json:"acr"`
-	ClientSession      string                     `json:"client_session"`
-	AllowedOrigins     []string                   `json:"allowed-origins"`
-	RealmAccess        *ResourceAccess            `json:"realm_access"`
-	ResourceAccess     map[string]*ResourceAccess `json:"resource_access"`
-	Authorization      *Authorization             `json:"authorization"`
-	ClientHost         string                     `json:"clientHost"`
-	ClientID           string                     `json:"clientId"`
-	ClientAddress      string                     `json:"clientAddress"`
-}
-
-// Valid implements the Claims interface for AccessToken
-func (at *AccessToken) Valid() error {
-	err := at.StandardClaims.Valid()
-	if err != nil {
-		err = fmt.Errorf("StandardClaims validation failed: %w", err)
-	}
-	// possibly more checking here
-	return err
-}
-
-// Valid implements the Claims interface for RequestingPartyToken
-func (rtp *RequestingPartyToken) Valid() error {
-	err := rtp.StandardClaims.Valid()
-	if err != nil {
-		err = fmt.Errorf("StandardClaims validation failed: %w", err)
-	}
-	return err
-}
-
 // Expect configuration in the json format offered from ks > client > installation
 type InstallDocument struct {
 	Realm         string            `json:"realm"`
@@ -406,10 +333,6 @@ type Resource struct {
 }
 
 type Resources []*Resource
-
-//type ResourceResponse struct {
-//	ID string `json:"_id,omitempty"`
-//}
 
 type ResourceMap map[string]*Resource
 
