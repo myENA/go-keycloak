@@ -44,7 +44,7 @@ func (ip StaticIssuerProvider) IssuerAddress() (string, error) {
 		addr string
 		err  error
 	)
-	if addr, err = parseAddr(string(ip), false); err != nil {
+	if addr, err = ParseAddr(string(ip), false); err != nil {
 		return "", fmt.Errorf("error parsing %q as url: %w", ip, err)
 	}
 	return addr, nil
@@ -74,7 +74,7 @@ func (ip *EnvironmentIssuerProvider) IssuerAddress() (string, error) {
 	if addr = strings.TrimSpace(os.Getenv(ip.varName)); addr == "" {
 		return "", fmt.Errorf("env var %q not defined or is empty", ip.varName)
 	}
-	if addr, err = parseAddr(addr, ip.insecure); err != nil {
+	if addr, err = ParseAddr(addr, ip.insecure); err != nil {
 		return "", fmt.Errorf("env var %q value %q was unable to be parsed as url: %w", ip.varName, addr, err)
 	}
 	return addr, nil

@@ -131,6 +131,29 @@ func RequestBearerToken(request *http.Request) (string, bool) {
 	return "", false
 }
 
+func ParseAddr(addr string, insecure bool) (string, error) {
+	var (
+		purl *url.URL
+		err  error
+	)
+	addr = strings.TrimSpace(addr)
+	if addr == "" {
+		return "", errors.New("addr is empty")
+	}
+	if !strings.HasPrefix(strings.ToLower(addr), "http") {
+		clean := strings.Trim(addr, ":/")
+		if insecure {
+			addr = fmt.Sprintf("http://%s", clean)
+		} else {
+			addr = fmt.Sprintf("https://%s", clean)
+		}
+	}
+	if purl, err = url.Parse(addr); err != nil {
+		return "", err
+	}
+	return fmt.Sprintf(addressFormat, purl.Scheme, purl.Host), nil
+}
+
 func defaultZerologWriter(w *zerolog.ConsoleWriter) {
 	w.NoColor = false
 	w.TimeFormat = time.Stamp
@@ -231,29 +254,6 @@ func contextStringValue(ctx context.Context, key string) (string, bool) {
 		}
 	}
 	return "", false
-}
-
-func parseAddr(addr string, insecure bool) (string, error) {
-	var (
-		purl *url.URL
-		err  error
-	)
-	addr = strings.TrimSpace(addr)
-	if addr == "" {
-		return "", errors.New("addr is empty")
-	}
-	if !strings.HasPrefix(strings.ToLower(addr), "http") {
-		clean := strings.Trim(addr, ":/")
-		if insecure {
-			addr = fmt.Sprintf("http://%s", clean)
-		} else {
-			addr = fmt.Sprintf("https://%s", clean)
-		}
-	}
-	if purl, err = url.Parse(addr); err != nil {
-		return "", err
-	}
-	return fmt.Sprintf(addressFormat, purl.Scheme, purl.Host), nil
 }
 
 func compileConfig(provided *APIClientConfig, mutators ...ConfigMutator) *APIClientConfig {
