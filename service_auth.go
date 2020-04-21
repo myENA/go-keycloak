@@ -199,7 +199,7 @@ func (k *baseService) ClientEntitlement(ctx context.Context, clientID string, cl
 // TODO: add this as method on TokenParser?
 func (k *baseService) keyFunc(ctx context.Context) jwt.Keyfunc {
 	return func(token *jwt.Token) (interface{}, error) {
-		return k.c.pp.Parse(ctx, k.c, token)
+		return k.c.tokenParser.Parse(ctx, k.c, token)
 	}
 }
 

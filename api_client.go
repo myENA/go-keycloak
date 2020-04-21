@@ -155,6 +155,7 @@ func DefaultAPIClientConfig() *APIClientConfig {
 		IssuerProvider: defaultIssuerProvider(),
 		RealmProvider:  ContextRealmProvider(),
 		TokenProvider:  ContextTokenProvider(),
+		TokenParser:    NewX509TokenParser(0),
 		HTTPClient:     cleanhttp.DefaultClient(),
 		Logger:         DefaultZerologLogger(),
 		Debug:          new(DebugConfig),
@@ -181,9 +182,9 @@ type APIClient struct {
 
 	mr requestMutatorRunner
 
-	rp RealmProvider
-	tp TokenProvider
-	pp TokenParser
+	realmProvider RealmProvider
+	tokenProvider TokenProvider
+	tokenParser   TokenParser
 
 	hc *http.Client
 }
@@ -200,10 +201,6 @@ func NewAPIClient(config *APIClientConfig, mutators ...ConfigMutator) (*APIClien
 	// try to ensure we have a sane-ish config
 	cc = compileConfig(config, mutators...)
 
-	if cc.TokenParser == nil {
-		return nil, errors.New("a token parser must be provided")
-	}
-
 	// attempt to set issuer address
 	if cl.issAddr, err = cc.IssuerProvider.IssuerAddress(); err != nil {
 		return nil, err
@@ -216,9 +213,9 @@ func NewAPIClient(config *APIClientConfig, mutators ...ConfigMutator) (*APIClien
 	cl.hc = cc.HTTPClient
 
 	// set providers
-	cl.rp = cc.RealmProvider
-	cl.tp = cc.TokenProvider
-	cl.pp = cc.TokenParser
+	cl.realmProvider = cc.RealmProvider
+	cl.tokenProvider = cc.TokenProvider
+	cl.tokenParser = cc.TokenParser
 
 	// set logger and debug mode
 	cl.log = cc.Logger
@@ -248,17 +245,17 @@ func (c *APIClient) IssuerAddress() string {
 
 // RealmProvider will return the RealmProvider defined at client construction
 func (c *APIClient) RealmProvider() RealmProvider {
-	return c.rp
+	return c.realmProvider
 }
 
 // TokenProvider will return the TokenProvider defined at client construction
 func (c *APIClient) TokenProvider() TokenProvider {
-	return c.tp
+	return c.tokenProvider
 }
 
 // TokenParser will return the token parser defined at client construction
 func (c *APIClient) TokenParser() TokenParser {
-	return c.pp
+	return c.tokenParser
 }
 
 // AuthService contains modeled api calls for auth API requests

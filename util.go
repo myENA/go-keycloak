@@ -14,6 +14,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/dcarbone/sclg/v2"
+	"github.com/google/go-cmp/cmp"
 	"github.com/rs/zerolog"
 )
 
@@ -302,6 +304,16 @@ func compileConfig(provided *APIClientConfig, mutators ...ConfigMutator) *APICli
 	actual.Debug = provided.Debug
 
 	return actual
+}
+
+func pkCacheEquivalencyTest(_, current, new interface{}) bool {
+	return cmp.Equal(current, new)
+}
+
+func pkCacheEventCallback(pkc *TimedPublicKeyCache) sclg.TimedCacheEventCallback {
+	return func(ev sclg.TimedCacheEvent, _ interface{}, message string) {
+		pkc.log.Debug().Str("event", ev.String()).Str("event-message", message).Msg("Event seen")
+	}
 }
 
 func handleResponse(resp *http.Response, modelPtr interface{}) error {
