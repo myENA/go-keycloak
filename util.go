@@ -208,7 +208,7 @@ func buildRequest(ctx context.Context, method, requestURL string, body interface
 	}
 
 	// build http request
-	req, err := newRequestWithContext(ctx, method, requestURL, bodyReader)
+	req, err := NewRequestWithContext(ctx, method, requestURL, bodyReader)
 	if err != nil {
 		return nil, err
 	}

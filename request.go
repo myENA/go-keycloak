@@ -12,7 +12,7 @@ type Request struct {
 	query url.Values
 }
 
-func newRequestWithContext(ctx context.Context, method, uri string, body io.Reader) (*Request, error) {
+func NewRequestWithContext(ctx context.Context, method, uri string, body io.Reader) (*Request, error) {
 	var (
 		err error
 
