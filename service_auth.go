@@ -2,7 +2,6 @@ package keycloak
 
 import (
 	"context"
-	"crypto/rsa"
 	"errors"
 	"fmt"
 	"net/http"
@@ -59,7 +58,7 @@ func (k *baseService) RealmIssuerConfiguration(ctx context.Context) (*RealmIssue
 	return ic, nil
 }
 
-// RealmOpenIDConfiguration returns OpenID Configuration metadata about a realm in the  instance being connected
+// OpenIDConfiguration returns OpenID Configuration metadata about a realm in the  instance being connected
 // to.  This endpoint exists across both 3.4 and newer versions of .
 func (k *baseService) OpenIDConfiguration(ctx context.Context) (*OpenIDConfiguration, error) {
 	var (
@@ -143,11 +142,10 @@ func (k *baseService) OpenIDConnectToken(ctx context.Context, req OpenIDConnectT
 	return token, nil
 }
 
-// ParseBearerToken will attempt to parse and validate a raw token into a modeled type.  If this method does not return
+// ParseToken will attempt to parse and validate a raw token into a modeled type.  If this method does not return
 // an error, you can safely assume the provided raw token is safe for use.
-func (k *baseService) ParseBearerToken(ctx context.Context, token string) (*AccessToken, error) {
+func (k *baseService) ParseToken(ctx context.Context, rawToken string, claimsType jwt.Claims) (*jwt.Token, error) {
 	var (
-		pk       *rsa.PublicKey
 		jwtToken *jwt.Token
 		err      error
 	)
@@ -155,16 +153,10 @@ func (k *baseService) ParseBearerToken(ctx context.Context, token string) (*Acce
 		return nil, err
 	}
 	ctx = IssuerAddressContext(ctx, k.c.IssuerAddress())
-	if pk, err = k.c.PublicKeyProvider().Load(ctx, k.c); err != nil {
-		return nil, err
+	if jwtToken, err = jwt.ParseWithClaims(rawToken, claimsType, k.keyFunc(ctx)); err != nil {
+		return nil, fmt.Errorf("error parsing raw token into %T: %w", claimsType, err)
 	}
-	if jwtToken, err = jwt.ParseWithClaims(token, new(AccessToken), k.keyFunc(pk)); err != nil {
-		return nil, fmt.Errorf("error parsing access token: %w", err)
-	}
-	if at, ok := jwtToken.Claims.(*AccessToken); ok {
-		return at, nil
-	}
-	return nil, errors.New("invalid claims on access token response")
+	return jwtToken, nil
 }
 
 // ClientEntitlement will attempt to call the pre-uma2 entitlement endpoint to return a Requesting Party Token
@@ -173,11 +165,8 @@ func (k *baseService) ParseBearerToken(ctx context.Context, token string) (*Acce
 func (k *baseService) ClientEntitlement(ctx context.Context, clientID string) (*RequestingPartyToken, error) {
 	var (
 		resp   *http.Response
-		pk     *rsa.PublicKey
 		parsed *jwt.Token
-		rpt    *RequestingPartyToken
 		err    error
-		ok     bool
 
 		rptResp = new(struct {
 			RPT string `json:"rpt"`
@@ -205,26 +194,17 @@ func (k *baseService) ClientEntitlement(ctx context.Context, clientID string) (*
 		return nil, err
 	}
 
-	if pk, err = k.c.PublicKeyProvider().Load(ctx, k.c); err != nil {
+	if parsed, err = k.ParseToken(ctx, rptResp.RPT, new(RequestingPartyToken)); err != nil {
 		return nil, err
 	}
-	if parsed, err = jwt.ParseWithClaims(rptResp.RPT, new(RequestingPartyToken), k.keyFunc(pk)); err != nil {
-		return nil, fmt.Errorf("error parsing requesting party token: %w", err)
-	}
-	if rpt, ok = parsed.Claims.(*RequestingPartyToken); ok {
-		return rpt, nil
-	}
-	// this should theoretically never be possible...
-	return nil, errors.New("invalid claims on requesting party token response")
+
+	return parsed.Claims.(*RequestingPartyToken), nil
 }
 
-// TODO: add this as method on PublicKeyProvider?
-func (k *baseService) keyFunc(pk *rsa.PublicKey) jwt.Keyfunc {
+// TODO: add this as method on TokenParser?
+func (k *baseService) keyFunc(ctx context.Context) jwt.Keyfunc {
 	return func(token *jwt.Token) (interface{}, error) {
-		if _, ok := token.Method.(*jwt.SigningMethodRSA); !ok {
-			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
-		}
-		return pk, nil
+		return k.c.pp.Parse(ctx, k.c, token)
 	}
 }
 

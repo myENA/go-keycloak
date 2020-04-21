@@ -3,9 +3,6 @@ package keycloak
 import (
 	"bytes"
 	"context"
-	"crypto/rsa"
-	"crypto/x509"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -17,7 +14,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dcarbone/sclg/v2"
 	"github.com/rs/zerolog"
 )
 
@@ -36,7 +32,7 @@ func (*ctxProvider) SetRealmValue(ctx context.Context) (context.Context, error) 
 
 // SetTokenValue will attempt to verify that the correct token key is set on the provided context, returning an error if
 // not found
-func (ctxProvider) SetTokenValue(ctx context.Context) (context.Context, error) {
+func (ctxProvider) SetTokenValue(ctx context.Context, _ *APIClient) (context.Context, error) {
 	if _, ok := ContextToken(ctx); ok {
 		return ctx, nil
 	}
@@ -258,29 +254,6 @@ func parseAddr(addr string, insecure bool) (string, error) {
 	return fmt.Sprintf(addressFormat, purl.Scheme, purl.Host), nil
 }
 
-func parsePublicKey(binKeyString string) (*rsa.PublicKey, error) {
-	var (
-		binKey []byte
-		pub    interface{}
-		pk     *rsa.PublicKey
-		err    error
-		ok     bool
-	)
-	// Decode the base64-encoded public key
-	if binKey, err = base64.StdEncoding.DecodeString(binKeyString); err != nil {
-		return nil, fmt.Errorf("base64 decoding of the binary public key failed: %w", err)
-	}
-	// Parse the (binary) PEM key
-	if pub, err = x509.ParsePKIXPublicKey(binKey); err != nil {
-		return nil, fmt.Errorf("error while parsing the PEM key: %w", err)
-	}
-	// Cast the key to the form we require
-	if pk, ok = pub.(*rsa.PublicKey); !ok {
-		return nil, errors.New("casting to rsa.PublicKey failed")
-	}
-	return pk, nil
-}
-
 func compileConfig(provided *APIClientConfig, mutators ...ConfigMutator) *APIClientConfig {
 	actual := DefaultAPIClientConfig()
 
@@ -313,8 +286,8 @@ func compileConfig(provided *APIClientConfig, mutators ...ConfigMutator) *APICli
 	if provided.TokenProvider != nil {
 		actual.TokenProvider = provided.TokenProvider
 	}
-	if provided.PublicKeyProvider != nil {
-		actual.PublicKeyProvider = provided.PublicKeyProvider
+	if provided.TokenParser != nil {
+		actual.TokenParser = provided.TokenParser
 	}
 
 	// misc clients
@@ -329,26 +302,6 @@ func compileConfig(provided *APIClientConfig, mutators ...ConfigMutator) *APICli
 	actual.Debug = provided.Debug
 
 	return actual
-}
-
-func pkCacheEquivalencyTest(_, current, new interface{}) bool {
-	var (
-		cpk, npk *rsa.PublicKey
-		ok       bool
-	)
-	if cpk, ok = current.(*rsa.PublicKey); !ok {
-		return false
-	}
-	if npk, ok = new.(*rsa.PublicKey); !ok {
-		return false
-	}
-	return cpk.E == npk.E
-}
-
-func pkCacheEventCallback(pkc *TimedPublicKeyCache) sclg.TimedCacheEventCallback {
-	return func(ev sclg.TimedCacheEvent, _ interface{}, message string) {
-		pkc.log.Debug().Str("event", ev.String()).Str("event-message", message).Msg("Event seen")
-	}
 }
 
 func handleResponse(resp *http.Response, modelPtr interface{}) error {

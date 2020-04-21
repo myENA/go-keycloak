@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/dgrijalva/jwt-go"
 	"github.com/hashicorp/go-cleanhttp"
 	"github.com/rs/zerolog"
 )
@@ -118,11 +119,11 @@ type APIClientConfig struct {
 	// you will be expected to provide a context with a token already defined with each request
 	TokenProvider TokenProvider
 
-	// PublicKeyProvider [optional]
+	// TokenParser [optional]
 	//
-	// The PublicKeyProvider will be called any time the client needs a realm's public key.  This is primarily used to
+	// The TokenParser will be called any time the client needs a realm's public key.  This is primarily used to
 	// validate access and bearer tokens
-	PublicKeyProvider PublicKeyProvider
+	TokenParser TokenParser
 
 	// PathPrefix [optional]
 	//
@@ -182,7 +183,7 @@ type APIClient struct {
 
 	rp RealmProvider
 	tp TokenProvider
-	pp PublicKeyProvider
+	pp TokenParser
 
 	hc *http.Client
 }
@@ -199,6 +200,10 @@ func NewAPIClient(config *APIClientConfig, mutators ...ConfigMutator) (*APIClien
 	// try to ensure we have a sane-ish config
 	cc = compileConfig(config, mutators...)
 
+	if cc.TokenParser == nil {
+		return nil, errors.New("a token parser must be provided")
+	}
+
 	// attempt to set issuer address
 	if cl.issAddr, err = cc.IssuerProvider.IssuerAddress(); err != nil {
 		return nil, err
@@ -213,11 +218,7 @@ func NewAPIClient(config *APIClientConfig, mutators ...ConfigMutator) (*APIClien
 	// set providers
 	cl.rp = cc.RealmProvider
 	cl.tp = cc.TokenProvider
-	if cc.PublicKeyProvider == nil {
-		cl.pp = NewCachingPublicKeyProvider(cc.Logger, DefaultPublicKeyCacheTTL, GlobalPublicKeyCache())
-	} else {
-		cl.pp = cc.PublicKeyProvider
-	}
+	cl.pp = cc.TokenParser
 
 	// set logger and debug mode
 	cl.log = cc.Logger
@@ -255,8 +256,8 @@ func (c *APIClient) TokenProvider() TokenProvider {
 	return c.tp
 }
 
-// PublicKeyProvider will return the defined public key provider defined at client construction
-func (c *APIClient) PublicKeyProvider() PublicKeyProvider {
+// TokenParser will return the token parser defined at client construction
+func (c *APIClient) TokenParser() TokenParser {
 	return c.pp
 }
 
@@ -272,9 +273,9 @@ func (c *APIClient) AdminService() *AdminService {
 
 // RequestAccessToken attempts to extract the encoded bearer token from the provided request and parse it into a modeled
 // access token type
-func (c *APIClient) RequestAccessToken(ctx context.Context, request *http.Request) (*AccessToken, error) {
+func (c *APIClient) RequestAccessToken(ctx context.Context, request *http.Request, claimsType jwt.Claims) (*jwt.Token, error) {
 	if bt, ok := RequestBearerToken(request); ok {
-		return c.AuthService().ParseBearerToken(ctx, bt)
+		return c.AuthService().ParseToken(ctx, bt, claimsType)
 	}
 	return nil, errors.New("bearer token not found in request")
 }
@@ -370,7 +371,7 @@ func (c *APIClient) requireRealm(ctx context.Context) (context.Context, error) {
 }
 
 func (c *APIClient) requireToken(ctx context.Context) (context.Context, error) {
-	return c.TokenProvider().SetTokenValue(ctx)
+	return c.TokenProvider().SetTokenValue(ctx, c)
 }
 
 func (c *APIClient) requireAllContextValues(ctx context.Context) (context.Context, error) {

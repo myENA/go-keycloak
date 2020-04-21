@@ -29,7 +29,7 @@ type TokenProvider interface {
 	// SetTokenValue MUST either return a context with the token key defined, or the original context with an error
 	// describing why it was unable to do so.  It must also defer to any pre-defined key value already present in the
 	// context.
-	SetTokenValue(context.Context) (context.Context, error)
+	SetTokenValue(context.Context, *APIClient) (context.Context, error)
 }
 
 // ConfidentialClientTokenProviderConfig must be provided to a new ConfidentialClientTokenProvider upon construction
@@ -73,10 +73,6 @@ type ConfidentialClientTokenProvider struct {
 	token          *OpenIDConnectToken
 	tokenRefreshed int64
 	tokenExpiry    int64
-
-	clientAccess chan chan *APIClient
-	close        chan struct{}
-	closed       bool
 }
 
 // NewConfidentialClientTokenProvider will attempt to construct a new ConfidentialClientTokenProvider for you based on
@@ -119,9 +115,6 @@ func NewConfidentialClientTokenProvider(conf *ConfidentialClientTokenProviderCon
 	tp.clientSecret = secretStr
 	tp.expiryMargin = expiryMargin
 
-	tp.close = make(chan struct{})
-	tp.clientAccess = make(chan chan *APIClient, 1)
-
 	return tp, nil
 }
 
@@ -151,83 +144,56 @@ func (tp *ConfidentialClientTokenProvider) Expired() bool {
 	return time.Now().After(time.Unix(0, tp.Expiry()))
 }
 
-// ClientAccess is listened to by the containing client for when this TokenProvider needs to execute a call off the
-// client
-func (tp *ConfidentialClientTokenProvider) ClientAccess() <-chan chan *APIClient {
-	return tp.clientAccess
-}
-
-// Close will shut down this TokenProvider, making it defunct.
-func (tp *ConfidentialClientTokenProvider) Close() {
-	tp.mu.Lock()
-	if tp.closed {
-		tp.mu.Unlock()
-		return
-	}
-	tp.closed = true
-	tp.mu.Unlock()
-	close(tp.close)
-	close(tp.clientAccess)
-	return
-}
-
 // RefreshToken will try to do just that.
-func (tp *ConfidentialClientTokenProvider) RefreshToken(ctx context.Context) error {
+func (tp *ConfidentialClientTokenProvider) RefreshToken(ctx context.Context, client *APIClient) error {
 	tp.mu.Lock()
 	defer tp.mu.Unlock()
 
-	if tp.closed {
-		return errors.New("token provider is closed")
-	}
-
-	// fetch APIClient
-	ch := make(chan *APIClient)
-	defer close(ch)
-	tp.clientAccess <- ch
-	client := <-ch
+	var (
+		authCtx context.Context
+		oidc    *OpenIDConnectToken
+		req     OpenIDConnectTokenRequest
+		err     error
+	)
 
 	// create new context with realm value overloaded to install document source realm
-	authCtx := RealmContext(ctx, tp.clientRealm)
+	authCtx = RealmContext(ctx, tp.clientRealm)
 
 	// attempt to fetch a new openid token for our confidential client
-	req := OpenIDConnectTokenRequest{
+	req = OpenIDConnectTokenRequest{
 		ClientID:     tp.clientID,
 		ClientSecret: tp.clientSecret,
 		GrantType:    confidentialClientUpdateParamGrantTypeValue,
 	}
-	token, err := client.AuthService().OpenIDConnectToken(authCtx, req)
-	if err != nil {
+
+	if oidc, err = client.AuthService().OpenIDConnectToken(authCtx, req); err != nil {
 		return fmt.Errorf("unable to fetch OpenIDConnectToken: %w", err)
 	}
 
-	// try to refresh access token.  this has the side-effect of also validating our new bearer token
-	if _, err = client.AuthService().ParseBearerToken(authCtx, token.AccessToken); err != nil {
+	// try to refresh access token.  this has the side-effect of also validating our new token
+	if _, err = client.AuthService().ParseToken(authCtx, oidc.AccessToken, nil); err != nil {
 		return fmt.Errorf("unable to refresh access token: %w", err)
 	}
 
 	// if valid, update client
-	tp.token = token
+	tp.token = oidc
 	tp.tokenRefreshed = time.Now().UnixNano()
-	tp.tokenExpiry = time.Now().Add((time.Duration(token.ExpiresIn) * time.Second) - tp.expiryMargin).UnixNano()
+	tp.tokenExpiry = time.Now().Add((time.Duration(oidc.ExpiresIn) * time.Second) - tp.expiryMargin).UnixNano()
 	return nil
 }
 
 // SetTokenValue will first attempt to use the locally cached last-known-good token.  If not defined or beyond the
 // expiration window, it will call RefreshToken before attempting to set the context token value.
-func (tp *ConfidentialClientTokenProvider) SetTokenValue(ctx context.Context) (context.Context, error) {
+func (tp *ConfidentialClientTokenProvider) SetTokenValue(ctx context.Context, client *APIClient) (context.Context, error) {
 	if _, ok := ContextToken(ctx); ok {
 		return ctx, nil
 	}
+
 	if tp.Expired() {
-		if err := tp.RefreshToken(ctx); err != nil {
+		if err := tp.RefreshToken(ctx, client); err != nil {
 			return ctx, err
 		}
 	}
-	tp.mu.RLock()
-	defer tp.mu.RUnlock()
-	if tp.closed {
-		return ctx, errors.New("token provider has been closed")
-	}
-	bt := tp.token.AccessToken
-	return TokenContext(ctx, bt), nil
+
+	return TokenContext(ctx, tp.token.AccessToken), nil
 }
