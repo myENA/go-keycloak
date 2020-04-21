@@ -153,6 +153,9 @@ func (k *baseService) ParseToken(ctx context.Context, rawToken string, claimsTyp
 		return nil, err
 	}
 	ctx = IssuerAddressContext(ctx, k.c.IssuerAddress())
+	if claimsType == nil {
+		claimsType = new(jwt.StandardClaims)
+	}
 	if jwtToken, err = jwt.ParseWithClaims(rawToken, claimsType, k.keyFunc(ctx)); err != nil {
 		return nil, fmt.Errorf("error parsing raw token into %T: %w", claimsType, err)
 	}
@@ -185,7 +188,7 @@ func (k *baseService) ClientEntitlement(ctx context.Context, clientID string, cl
 	}
 
 	// execute request.
-	if resp, err = k.c.CallRequireOK(ctx, http.MethodGet, requestPath, claimsType); err != nil {
+	if resp, err = k.c.CallRequireOK(ctx, http.MethodGet, requestPath, nil); err != nil {
 		return nil, err
 	}
 
