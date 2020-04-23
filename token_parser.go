@@ -99,5 +99,5 @@ func (xtp *X509TokenParser) Parse(ctx context.Context, client *APIClient, token 
 		}
 	}
 
-	return nil, fmt.Errorf("cannot validate token with alg %q against public key of type %T", token.Method.Alg(), rpk)
+	return nil, fmt.Errorf("cannot validate token with alg %q against public key of type %T", token.Method.Alg(), pub)
 }
