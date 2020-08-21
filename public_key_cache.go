@@ -4,7 +4,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/dcarbone/sclg/v2"
+	"github.com/dcarbone/sclg/v3"
 	"github.com/rs/zerolog"
 )
 
@@ -172,7 +172,7 @@ func (pkc *TimedPublicKeyCache) Load(issuerHost, realm string) (interface{}, boo
 // Store will permanently persist the provided public key into the underlying TimedCache instance, overwriting any
 // existing entry
 func (pkc *TimedPublicKeyCache) Store(issuerHost, realm string, pk interface{}, ttl time.Duration) {
-	pkc.cache.StoreFor(ttl, buildPKCacheKey(issuerHost, realm), pk)
+	pkc.cache.StoreFor(buildPKCacheKey(issuerHost, realm), pk, ttl)
 }
 
 // Remove will delete a cached parsed public key from the underlying TimedCache instance, returning true if an item was

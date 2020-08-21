@@ -14,7 +14,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dcarbone/sclg/v2"
+	"github.com/dcarbone/sclg/v3"
 	"github.com/google/go-cmp/cmp"
 	"github.com/rs/zerolog"
 )
