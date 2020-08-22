@@ -141,7 +141,7 @@ func (tp *ConfidentialClientTokenProvider) Expired() bool {
 	if tp.token == nil {
 		return true
 	}
-	return time.Now().After(time.Unix(0, tp.Expiry()))
+	return time.Now().After(time.Unix(0, tp.tokenExpiry))
 }
 
 // RefreshToken will try to do just that.
