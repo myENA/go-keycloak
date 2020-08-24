@@ -166,6 +166,10 @@ func (tp *ConfidentialClientTokenProvider) RefreshToken(ctx context.Context, cli
 		GrantType:    confidentialClientUpdateParamGrantTypeValue,
 	}
 
+	// explicitly clear out existing token value
+	authCtx = context.WithValue(authCtx, ContextKeyToken, nil)
+
+	// fetch new oidc token
 	if oidc, err = client.AuthService().OpenIDConnectToken(authCtx, req); err != nil {
 		return fmt.Errorf("unable to fetch OpenIDConnectToken: %w", err)
 	}
