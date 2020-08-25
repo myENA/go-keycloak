@@ -284,8 +284,10 @@ type OpenIDConnectTokenRequest struct {
 	// RequestingPartyToken - todo: what exactly does this look like...
 	RequestingPartyToken string `json:"rpt,omitempty" url:"rpt,omitempty"`
 
-	ResponseIncludeResourceName *bool `json:"response_include_resource_name" url:"response_include_resource_name"`
-	ResponsePermissionsLimit    *int  `json:"response_permissions_limit,omitempty" url:"response_permissions_limit,omitempty"`
+	ResponseIncludeResourceName *bool `json:"response_include_resource_name,omitempty" url:"response_include_resource_name,omitempty"`
+
+	ResponsePermissionsLimit *int `json:"response_permissions_limit,omitempty" url:"response_permissions_limit,omitempty"`
+
 	// ResponseMode [optional] - Allowed values: ["decision", "permissions"]
 	ResponseMode string `json:"response_mode,omitempty" url:"response_mode,omitempty"`
 
