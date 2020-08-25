@@ -154,7 +154,7 @@ func (k *baseService) ParseToken(ctx context.Context, rawToken string, claimsTyp
 	}
 	ctx = IssuerAddressContext(ctx, k.c.IssuerAddress())
 	if claimsType == nil {
-		claimsType = new(jwt.StandardClaims)
+		claimsType = new(StandardClaims)
 	}
 	if jwtToken, err = jwt.ParseWithClaims(rawToken, claimsType, k.keyFunc(ctx)); err != nil {
 		return nil, fmt.Errorf("error parsing raw token into %T: %w", claimsType, err)
