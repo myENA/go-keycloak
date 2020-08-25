@@ -120,7 +120,7 @@ func (k *baseService) OpenIDConnectToken(ctx context.Context, req OpenIDConnectT
 	if ctx, err = k.c.RequireRealm(ctx); err != nil {
 		return nil, err
 	}
-	if requestPath, err = k.realmsPath(ctx, confidentialClientTokenBits...); err != nil {
+	if requestPath, err = k.realmsPath(ctx, oidcTokenBits...); err != nil {
 		return nil, err
 	}
 	if body, err = query.Values(req); err != nil {
@@ -140,6 +140,39 @@ func (k *baseService) OpenIDConnectToken(ctx context.Context, req OpenIDConnectT
 		return nil, err
 	}
 	return token, nil
+}
+
+func (k *baseService) IntrospectRequestingPartyToken(ctx context.Context, rawRPT string) (*TokenIntrospectionResults, error) {
+	var (
+		requestPath string
+		body        url.Values
+		resp        *http.Response
+		results     *TokenIntrospectionResults
+		err         error
+	)
+	if ctx, err = k.c.RequireRealm(ctx); err != nil {
+		return nil, err
+	}
+	if requestPath, err = k.realmsPath(ctx, oidcTokenIntrospectBits...); err != nil {
+		return nil, err
+	}
+	body = make(url.Values)
+	body.Add("token_type_hint", "requesting_party_token")
+	body.Add("token", rawRPT)
+	resp, err = k.c.CallRequireOK(
+		ctx,
+		http.MethodPost,
+		requestPath,
+		strings.NewReader(body.Encode()),
+		HeaderMutator(httpHeaderContentType, httpHeaderValueFormURLEncoded, true))
+	if err != nil {
+		return nil, err
+	}
+	results = new(TokenIntrospectionResults)
+	if err = handleResponse(resp, results); err != nil {
+		return nil, err
+	}
+	return results, nil
 }
 
 // ParseToken will attempt to parse and validate a raw token into a modeled type.  If this method does not return

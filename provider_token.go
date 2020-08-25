@@ -13,13 +13,10 @@ const (
 	DefaultTokenExpirationMargin = 2 * time.Second
 )
 
-const (
-	confidentialClientUpdateParamGrantTypeValue = "client_credentials"
-)
-
 var (
-	confidentialClientTokenBits = []string{"protocol", "openid-connect", "token"}
-	tokenIntrospectBits         = append(confidentialClientTokenBits, "introspect")
+	// todo: don't like this, pull from .well-known endpoints.
+	oidcTokenBits           = []string{"protocol", "openid-connect", "token"}
+	oidcTokenIntrospectBits = append(oidcTokenBits, "introspect")
 )
 
 // TokenProvider
@@ -163,10 +160,10 @@ func (tp *ConfidentialClientTokenProvider) RefreshToken(ctx context.Context, cli
 	req = OpenIDConnectTokenRequest{
 		ClientID:     tp.clientID,
 		ClientSecret: tp.clientSecret,
-		GrantType:    confidentialClientUpdateParamGrantTypeValue,
+		GrantType:    GrantTypeClientCredentials,
 	}
 
-	// explicitly clear out existing token value
+	// explicitly override any existing token value
 	authCtx = context.WithValue(authCtx, ContextKeyToken, nil)
 
 	// fetch new oidc token

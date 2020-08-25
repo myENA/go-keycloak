@@ -3,6 +3,7 @@ package keycloak
 import (
 	"bytes"
 	"context"
+	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -329,4 +330,19 @@ func handleResponse(resp *http.Response, modelPtr interface{}) error {
 	}
 
 	return nil
+}
+
+func verifyAudience(auds []string, cmp string, required bool) bool {
+	if len(auds) == 0 {
+		return !required
+	}
+	for _, aud := range auds {
+		if aud == "" {
+			return !required
+		}
+		if subtle.ConstantTimeCompare([]byte(aud), []byte(cmp)) != 0 {
+			return true
+		}
+	}
+	return false
 }

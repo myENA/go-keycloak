@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/dgrijalva/jwt-go"
@@ -231,12 +232,37 @@ nbf = not before
 sub = subject
 */
 
+type OpenIDConnectTokenPermission struct {
+	Resource string
+	Scope    string
+}
+
+func NewOpenIDConnectTokenPermission(resource, scope string) OpenIDConnectTokenPermission {
+	return OpenIDConnectTokenPermission{resource, scope}
+}
+
+func (p OpenIDConnectTokenPermission) MarshalText() ([]byte, error) {
+	return []byte(fmt.Sprintf("%s#%s", p.Resource, p.Scope)), nil
+}
+
+func (p *OpenIDConnectTokenPermission) UnmarshalText(b []byte) error {
+	if len(b) == 0 {
+		return nil
+	}
+	if !strings.Contains(string(b), "#") {
+		return fmt.Errorf("expected token \"#\" missing in %q", string(b))
+	}
+	s := strings.SplitN(string(b), "#", 2)
+	*p = OpenIDConnectTokenPermission{s[0], s[1]}
+	return nil
+}
+
 type OpenIDConnectTokenRequest struct {
 	// GrantType [required]
 	GrantType string `json:"grant_type,omitempty" url:"grant_type,omitempty"`
 
 	// Permission [optional] - Request specific access to "Resource#scope[,scope...]"
-	Permissions []string `json:"permission,omitempty" url:"permission,omitempty"`
+	Permissions []OpenIDConnectTokenPermission `json:"permission,omitempty" url:"permission,omitempty"`
 
 	ClientID     string `json:"client_id,omitempty" url:"client_id,omitempty"`
 	ClientSecret string `json:"client_secret,omitempty" url:"client_secret,omitempty"`
@@ -266,6 +292,23 @@ type OpenIDConnectTokenRequest struct {
 	SubmitRequest *bool `json:"submit_request,omitempty" url:"submit_request,omitempty"`
 }
 
+func NewOpenIDConnectTokenRequest(grantType string, permissions ...OpenIDConnectTokenPermission) *OpenIDConnectTokenRequest {
+	r := new(OpenIDConnectTokenRequest)
+	r.GrantType = grantType
+	r.Permissions = permissions
+	return r
+}
+
+// AddPermission is a helper method to add a permission to the request.  There is no concurrency protection, so use at
+// your own risk.
+func (r *OpenIDConnectTokenRequest) AddPermission(resource, scope string) *OpenIDConnectTokenRequest {
+	if r.Permissions == nil {
+		r.Permissions = make([]OpenIDConnectTokenPermission, 0)
+	}
+	r.Permissions = append(r.Permissions, NewOpenIDConnectTokenPermission(resource, scope))
+	return r
+}
+
 // Token payload returned from the TokenEndpoint
 type OpenIDConnectToken struct {
 	AccessToken      string `json:"access_token"`
@@ -276,6 +319,20 @@ type OpenIDConnectToken struct {
 	IdToken          string `json:"id_token"`
 	NotBeforePolicy  int    `json:"not_before_policy"`
 	SessionState     string `json:"session_state"`
+}
+
+type TokenIntrospectionResultsPermission struct {
+	ResourceID   string `json:"resource_id"`
+	ResourceName string `json:"resource_name"`
+}
+
+type TokenIntrospectionResults struct {
+	Permissions []TokenIntrospectionResultsPermission `json:"permissions"`
+	Expires     int                                   `json:"exp"`
+	NotBefore   int                                   `json:"nbf"`
+	IssuedAt    int                                   `json:"iat"`
+	Audience    string                                `json:"aud"`
+	Active      bool                                  `json:"active"`
 }
 
 // Expect configuration in the json format offered from ks > client > installation
@@ -681,6 +738,25 @@ func (s StringOrSlice) MarshalJSON() ([]byte, error) {
 }
 
 type StandardClaims struct {
-	*jwt.StandardClaims
+	jwt.StandardClaims
 	Audience StringOrSlice `json:"aud,omitempty"` // overloaded to support multiple audience tokens
+}
+
+func (c *StandardClaims) VerifyAudience(cmp string, required bool) bool {
+	return verifyAudience(c.Audience, cmp, required)
+}
+
+type MapClaims jwt.MapClaims
+
+func (m MapClaims) VerifyAudience(cmp string, req bool) bool {
+	if v, ok := m["aud"]; ok {
+		if aud, ok := v.(string); ok {
+			return verifyAudience([]string{aud}, cmp, req)
+		} else if auds, ok := v.([]string); ok {
+			return verifyAudience(auds, cmp, req)
+		} else if auds, ok := v.(StringOrSlice); ok {
+			return verifyAudience(auds, cmp, req)
+		}
+	}
+	return false
 }

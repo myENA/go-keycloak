@@ -19,9 +19,13 @@ const (
 	ContextKeyToken         = "token"
 	ContextKeyRealm         = "keycloak_realm"
 
-	// config defaults for
+	// config defaults
 	DefaultPathPrefix        = "auth"
 	DefaultPublicKeyCacheTTL = 24 * time.Hour
+
+	// grant type values
+	GrantTypeUMATicket         = "urn:ietf:params:oauth:grant-type:uma-ticket"
+	GrantTypeClientCredentials = "client_credentials"
 
 	// public key cache stuff
 	pkKeyFormat = "%s\n%s"
