@@ -48,6 +48,7 @@ func (k *baseService) RealmIssuerConfiguration(ctx context.Context) (*RealmIssue
 	if requestPath, err = k.realmsPath(ctx); err != nil {
 		return nil, err
 	}
+	ctx = context.WithValue(ctx, ContextKeyToken, nil)
 	if resp, err = k.c.CallRequireOK(ctx, http.MethodGet, requestPath, nil); err != nil {
 		return nil, err
 	}
@@ -73,6 +74,7 @@ func (k *baseService) OpenIDConfiguration(ctx context.Context) (*OpenIDConfigura
 	if requestPath, err = k.realmsPath(ctx, kcPathOIDC); err != nil {
 		return nil, err
 	}
+	ctx = context.WithValue(ctx, ContextKeyToken, nil)
 	if resp, err = k.c.CallRequireOK(ctx, http.MethodGet, requestPath, nil); err != nil {
 		return nil, err
 	}
@@ -98,6 +100,7 @@ func (k *baseService) UMA2Configuration(ctx context.Context) (*UMA2Configuration
 	if requestPath, err = k.realmsPath(ctx, kcPathUMA2C); err != nil {
 		return nil, err
 	}
+	ctx = context.WithValue(ctx, ContextKeyToken, nil)
 	if resp, err = k.c.CallRequireOK(ctx, http.MethodGet, requestPath, nil); err != nil {
 		return nil, err
 	}
