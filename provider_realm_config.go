@@ -1,6 +1,8 @@
 package keycloak
 
 import (
+	"context"
+	"fmt"
 	"sync"
 	"time"
 
@@ -8,19 +10,78 @@ import (
 	"github.com/rs/zerolog"
 )
 
+// RealmConfigurationProvider
+//
+// This interface describes any implementation that can provide a realm name to the given context
+type RealmConfigurationProvider interface {
+	// RealmConfiguration must return either the data from /auth/realms/{realm} or an error
+	RealmConfiguration(ctx context.Context, client *APIClient, realm string) (RealmIssuerConfiguration, error)
+
+	// OpenIDConfiguration must return either the data from /auth/realms/{realm}/.well-known/openid-configuration or an
+	// error
+	OpenIDConfiguration(ctx context.Context, client *APIClient, realm string) (*OpenIDConfiguration, error)
+
+	// UMA2Configuration must, if the Keycloak instance is new enough, return either the data from
+	// /auth/realms/{realm}/.well-known/uma2-configuration or an error
+	UMA2Configuration(ctx context.Context, client *APIClient, realm string) (*UMA2Configuration, error)
+}
+
+// GlobalRealmConfigurationProvider will utilize the global config cache to handle realm configuration re-use.
+type GlobalRealmConfigurationProvider struct {
+	mu       sync.Mutex
+	mutators []RequestMutator
+}
+
+func NewGlobalRealmConfigProvider(mutators ...RequestMutator) *GlobalRealmConfigurationProvider {
+	rp := new(GlobalRealmConfigurationProvider)
+	if mutators == nil {
+		mutators = make([]RequestMutator, 0, 0)
+	}
+	rp.mutators = mutators
+	return rp
+}
+
+// SetRealmValue will attempt to locate a pre-existing realm key on the provided context, returning the original
+// context if one is found.  If not, it will return a new context with its own realm value defined.
+func (rp *GlobalRealmConfigurationProvider) RealmConfiguration(ctx context.Context, client *APIClient, realm string) (RealmIssuerConfiguration, error) {
+	var (
+		realmConfig RealmIssuerConfiguration
+		ok          bool
+		err         error
+
+		cache = globalRealmConfigCacheInst()
+	)
+
+	// todo: this is to prevent possibly tons of hits from all attempting to refresh the cache at once, but may not
+	// be necessary...
+	rp.mu.Lock()
+	defer rp.mu.Unlock()
+
+	// first, check if we have cached version of realm config
+	if realmConfig, ok = cache.LoadConfig(client.IssuerAddress(), realm); !ok {
+		// failing that, try to fetch and update cache
+		if realmConfig, err = client.RealmIssuerConfiguration(ctx, realm, rp.mutators...); err != nil {
+			return realmConfig, fmt.Errorf("error fetching realm issuer configuration: %w", err)
+		}
+		cache.StoreConfig(client.IssuerAddress(), realm, realmConfig)
+	}
+
+	return realmConfig, nil
+}
+
 // RealmConfigCache
 //
 // This type is used to store and retrieve processed realm configuration on a per-issuer basis, allowing for more
 // efficient multi-realm functionality within the client
 type RealmConfigCache interface {
-	// Load must attempt to retrieve a the processed config for the issuer's realm
-	Load(issuerHost, realm string) (RealmIssuerConfiguration, bool)
+	LoadConfig(issuerHost, realm string) (RealmIssuerConfiguration, bool)
+	LoadOpenIDConfiguration(issuerHost, realm string) (*OpenIDConfiguration, bool)
+	LoadUMA2Configuration(issuerHost, realm string) (*UMA2Configuration, bool)
 
-	// Store must attempt to persist the provided realm config into cache for the specified duration.  Any ttl value of
-	// 0 or less must be considered "infinite"
-	Store(issuerHost, realm string, realmConfig RealmIssuerConfiguration)
+	StoreConfig(issuerHost, realm string, realmConfig RealmIssuerConfiguration)
+	StoreOpenIDConfiguration(issuerHost, realm string)
 
-	// Remove must immediately render a cached realm config no longer usable.
+	// Delete must immediately render all cached configs for the provided issuer & realm combo no longer usable.
 	Delete(issuerHost, realm string)
 
 	// List must return a list of all currently cached realm configs in a map with a structure of
@@ -66,7 +127,7 @@ func NewDebugRealmConfigCache() RealmConfigCache {
 }
 
 // Load will attempt to return an existing parsed key entry for the provided issuer and realm
-func (rcc *debugRealmConfigCache) Load(issuerHost, realm string) (RealmIssuerConfiguration, bool) {
+func (rcc *debugRealmConfigCache) LoadConfig(issuerHost, realm string) (RealmIssuerConfiguration, bool) {
 	if v, ok := rcc.configs.Load(buildRCCacheKey(issuerHost, realm)); ok {
 		return v.(RealmIssuerConfiguration), true
 	}
@@ -74,13 +135,13 @@ func (rcc *debugRealmConfigCache) Load(issuerHost, realm string) (RealmIssuerCon
 }
 
 // Store will persist the provided parsed public key for the issuer and realm
-func (rcc *debugRealmConfigCache) Store(issuerHost, realm string, realmConfig RealmIssuerConfiguration) {
+func (rcc *debugRealmConfigCache) StoreConfig(issuerHost, realm string, realmConfig RealmIssuerConfiguration) {
 	rcc.configs.Store(buildRCCacheKey(issuerHost, realm), realmConfig)
 }
 
 // Remove will attempt to remove a stored parsed public key for the provided issuer and realm, returning true if an item
 // was indeed removed
-func (rcc *debugRealmConfigCache) Delete(issuerHost, realm string) {
+func (rcc *debugRealmConfigCache) DeleteConfig(issuerHost, realm string) {
 	rcc.configs.Delete(buildRCCacheKey(issuerHost, realm))
 }
 
@@ -142,7 +203,7 @@ func NewTimedRealmConfigCache(log zerolog.Logger, ttl time.Duration, timedCacheM
 }
 
 // Load will attempt to pull the specified cache item from the underlying TimedCache instance
-func (rcc *TimedRealmConfigCache) Load(issuerHost, realm string) (RealmIssuerConfiguration, bool) {
+func (rcc *TimedRealmConfigCache) LoadConfig(issuerHost, realm string) (RealmIssuerConfiguration, bool) {
 	if v, ok := rcc.cache.Load(buildRCCacheKey(issuerHost, realm)); ok {
 		return v.(RealmIssuerConfiguration), true
 	}
@@ -151,13 +212,13 @@ func (rcc *TimedRealmConfigCache) Load(issuerHost, realm string) (RealmIssuerCon
 
 // Store will permanently persist the provided public key into the underlying TimedCache instance, overwriting any
 // existing entry
-func (rcc *TimedRealmConfigCache) Store(issuerHost, realm string, realmConfig RealmIssuerConfiguration) {
+func (rcc *TimedRealmConfigCache) StoreConfig(issuerHost, realm string, realmConfig RealmIssuerConfiguration) {
 	rcc.cache.StoreFor(buildRCCacheKey(issuerHost, realm), realmConfig, rcc.ttl)
 }
 
 // Remove will delete a cached parsed public key from the underlying TimedCache instance, returning true if an item was
 // actually deleted
-func (rcc *TimedRealmConfigCache) Delete(issuerHost, realm string) {
+func (rcc *TimedRealmConfigCache) DeleteConfig(issuerHost, realm string) {
 	rcc.cache.Delete(buildRCCacheKey(issuerHost, realm))
 }
 

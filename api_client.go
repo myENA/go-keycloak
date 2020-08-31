@@ -39,8 +39,8 @@ const (
 	httpHeaderValueJSON                 = "application/json"
 	httpHeaderValueFormURLEncoded       = "application/x-www-form-urlencoded"
 	httpHeaderAuthorization             = "Authorization"
-	httpHeaderAuthorizationBearerPrefix = "Bearer "
-	httpHeaderAuthValueFormat           = httpHeaderAuthorizationBearerPrefix + "%s"
+	httpHeaderAuthorizationBearerPrefix = "Bearer"
+	httpHeaderAuthValueFormat           = httpHeaderAuthorizationBearerPrefix + " %s"
 	httpHeaderLocationKey               = "Location"
 
 	// permissions params
@@ -101,6 +101,22 @@ type APIClientConfig struct {
 	// See "provider_issuer.go" for available providers.
 	IssuerProvider IssuerProvider
 
+	// RealmConfigProvider [optional]
+	//
+	// The RealmConfigProvider will be called on a per-request basis, depending on if that request needs to have the realm
+	// injected into the context.
+	//
+	// This is used in a few key ways:
+	// -  Public Key retrieval and caching
+	// -  URL construction (i.e. /auth/realms/{realm}/.well-known/openid-configuration)
+	// -  Token validation
+	//
+	// The above is not a comprehensive list, but generally speaking the overwhelming majority of requests require the
+	// realm value to defined.
+	//
+	// See "provider_realm_config.go" for implementation details.
+	RealmConfigProvider RealmConfigurationProvider
+
 	// PathPrefix [optional]
 	//
 	// URL Path prefix.  Defaults to value of DefaultPathPrefix.
@@ -127,11 +143,12 @@ type APIClientConfig struct {
 // expected to be manually defined in the context provided to each request.
 func DefaultAPIClientConfig() *APIClientConfig {
 	c := APIClientConfig{
-		PathPrefix:     DefaultPathPrefix,
-		IssuerProvider: defaultIssuerProvider(),
-		HTTPClient:     cleanhttp.DefaultClient(),
-		Logger:         DefaultZerologLogger(),
-		Debug:          new(DebugConfig),
+		PathPrefix:          DefaultPathPrefix,
+		IssuerProvider:      defaultIssuerProvider(),
+		RealmConfigProvider: NewGlobalRealmConfigProvider(),
+		HTTPClient:          cleanhttp.DefaultClient(),
+		Logger:              DefaultZerologLogger(),
+		Debug:               new(DebugConfig),
 	}
 	return &c
 }
@@ -144,6 +161,8 @@ type APIClient struct {
 
 	issAddr    string
 	pathPrefix string
+
+	realmConfigProvider RealmConfigurationProvider
 
 	mr requestMutatorRunner
 
@@ -159,24 +178,16 @@ func NewAPIClient(config *APIClientConfig, mutators ...ConfigMutator) (*APIClien
 		cl = new(APIClient)
 	)
 
-	// try to ensure we have a sane-ish config
 	cc = compileBaseConfig(config, mutators...)
 
-	// attempt to set issuer address
 	if cl.issAddr, err = cc.IssuerProvider.IssuerAddress(); err != nil {
 		return nil, err
 	}
 
-	// set paths
+	cl.realmConfigProvider = cc.RealmConfigProvider
 	cl.pathPrefix = cc.PathPrefix
-
-	// set http client
 	cl.hc = cc.HTTPClient
-
-	// set logger and debug mode
 	cl.log = cc.Logger
-
-	// build request mutator runner
 	cl.mr = buildRequestMutatorRunner(cc.Debug)
 
 	return cl, nil
@@ -197,6 +208,10 @@ func (c *APIClient) PathPrefix() string {
 // IssuerAddress will return the address of the issuer this client is targeting
 func (c *APIClient) IssuerAddress() string {
 	return c.issAddr
+}
+
+func (c *APIClient) RealmConfigProvider() RealmConfigurationProvider {
+	return c.realmConfigProvider
 }
 
 // RealmIssuerConfiguration returns metadata about the keycloak realm instance being connected to, such as the public
@@ -283,37 +298,18 @@ func (c *APIClient) adminRealmsPath(realm string, bits ...string) (string, error
 }
 
 type RealmAPIClientConfig struct {
-	// RealmProvider [optional]
+	// RealmName [required]
 	//
-	// The RealmProvider will be called on a per-request basis, depending on if that request needs to have the realm
-	// injected into the context.
-	//
-	// This is used in a few key ways:
-	// -  Public Key retrieval and caching
-	// -  URL construction (i.e. /auth/realms/{realm}/.well-known/openid-configuration)
-	// -  Token validation
-	//
-	// The above is not a comprehensive list, but generally speaking the overwhelming majority of requests require the
-	// realm value to defined.
-	//
-	// See "provider_realm.go" for implementation details.  If you construct a config using DefaultAPIClientConfig(),
-	// you will be expected to provide a context with the realm already defined with each request
-	RealmProvider RealmConfigurationProvider
+	// This is the name of the realm the client will be scoped too
+	RealmName string
 
-	// TokenProvider [optional]
-	//
-	// The TokenProvider will be called on a per-request basis, as it is needed.  Not all requests require a bearer
-	// token.  For example, the OpenID Configuration and Realm Issuer Configuration endpoints are open and simply
-	// require a Realm value.
-	//
-	// As a general rule, however, all  "admin" endpoints (i.e. /auth/admin/realms/{realm}/users) will require
-	// a token.
+	// TokenProvider [required]
 	//
 	// See "token_provider.go" for implementation details.  If you construct a config using DefaultAPIClientConfig(),
 	// you will be expected to provide a context with a token already defined with each request
 	TokenProvider TokenProvider
 
-	// TokenParser [optional]
+	// TokenParser [required]
 	//
 	// The TokenParser will be called any time the client needs a realm's public key.  This is primarily used to
 	// validate access and bearer tokens
@@ -329,19 +325,14 @@ type RealmAPIClient struct {
 	realmName string
 }
 
-func (c *APIClient) RealmAPIClient(ctx context.Context, conf *RealmAPIClientConfig, mutators ...RequestMutator) (*RealmAPIClient, error) {
-	var (
-		ok  bool
-		err error
-
-		rc = new(RealmAPIClient)
-	)
+func (c *APIClient) RealmAPIClient(ctx context.Context, conf *RealmAPIClientConfig) (*RealmAPIClient, error) {
+	rc := new(RealmAPIClient)
 
 	if conf == nil {
 		return nil, errors.New("config cannot be nil")
 	}
-	if conf.RealmProvider == nil {
-		return nil, errors.New("realm provide cannot be nil")
+	if conf.RealmName == "" {
+		return nil, errors.New("realm name cannot be empty")
 	}
 	if conf.TokenProvider == nil {
 		return nil, errors.New("token provide cannot be nil")
@@ -351,11 +342,7 @@ func (c *APIClient) RealmAPIClient(ctx context.Context, conf *RealmAPIClientConf
 	}
 
 	rc.APIClient = c
-
-	if rc.realmName, err = conf.RealmProvider.RealmConfiguration(); err != nil {
-		return nil, fmt.Errorf("error fetching realm name: %w", err)
-	}
-
+	rc.realmName = conf.RealmName
 	rc.tokenProvider = conf.TokenProvider
 	rc.tokenParser = conf.TokenParser
 
@@ -379,18 +366,40 @@ func (rc *RealmAPIClient) TokenParser() TokenParser {
 
 // RealmIssuerConfiguration will either return the current cached version of this client's realm config or attempt to
 // refresh it should no cache version be found.
-func (rc *RealmAPIClient) RealmIssuerConfiguration(ctx context.Context, mutators ...RequestMutator) (RealmIssuerConfiguration, error) {
-	var (
-		realmConfig RealmIssuerConfiguration
-		ok          bool
-		err         error
-	)
-
-	return realmConfig, nil
+func (rc *RealmAPIClient) RealmIssuerConfiguration(ctx context.Context) (RealmIssuerConfiguration, error) {
+	return rc.RealmConfigProvider().RealmConfiguration(ctx, rc.APIClient, rc.realmName)
 }
 
-func (rc *RealmAPIClient) TokenServiceURL(ctx context.Context, mutators ...RequestMutator) (string, error) {
+func (rc *RealmAPIClient) EncodedPublicKey(ctx context.Context) (string, error) {
+	if conf, err := rc.RealmIssuerConfiguration(ctx); err != nil {
+		return "", err
+	} else {
+		return conf.PublicKey, nil
+	}
+}
 
+func (rc *RealmAPIClient) TokenServiceURL(ctx context.Context) (string, error) {
+	if conf, err := rc.RealmIssuerConfiguration(ctx); err != nil {
+		return "", err
+	} else {
+		return conf.TokenService, nil
+	}
+}
+
+func (rc *RealmAPIClient) AccountServiceURL(ctx context.Context) (string, error) {
+	if conf, err := rc.RealmIssuerConfiguration(ctx); err != nil {
+		return "", err
+	} else {
+		return conf.AccountService, nil
+	}
+}
+
+func (rc *RealmAPIClient) TokensNotBeforeTime(ctx context.Context) (time.Time, error) {
+	if conf, err := rc.RealmIssuerConfiguration(ctx); err != nil {
+		return time.Time{}, err
+	} else {
+		return time.Unix(int64(conf.TokensNotBefore)*int64(time.Second), 0), nil
+	}
 }
 
 // RequestAccessToken attempts to extract the encoded bearer token from the provided request and parse it into a modeled
@@ -400,4 +409,30 @@ func (rc *RealmAPIClient) RequestAccessToken(ctx context.Context, request *http.
 		return rc.ParseToken(ctx, bt, claimsType)
 	}
 	return nil, errors.New("bearer token not found in request")
+}
+
+// ParseToken will attempt to parse and validate a raw token into a modeled type.  If this method does not return
+// an error, you can safely assume the provided raw token is safe for use.
+func (rc *RealmAPIClient) ParseToken(ctx context.Context, rawToken string, claimsType jwt.Claims) (*jwt.Token, error) {
+	var (
+		jwtToken *jwt.Token
+		err      error
+	)
+	if claimsType == nil {
+		claimsType = new(StandardClaims)
+	}
+	if jwtToken, err = jwt.ParseWithClaims(rawToken, claimsType, rc.keyFunc(ctx)); err != nil {
+		return nil, fmt.Errorf("error parsing raw token into %T: %w", claimsType, err)
+	}
+	return jwtToken, nil
+}
+
+func (rc *RealmAPIClient) keyFunc(ctx context.Context) jwt.Keyfunc {
+	return func(token *jwt.Token) (interface{}, error) {
+		if conf, err := rc.RealmIssuerConfiguration(ctx); err != nil {
+			return nil, err
+		} else {
+			return rc.TokenParser().Parse(conf, token)
+		}
+	}
 }

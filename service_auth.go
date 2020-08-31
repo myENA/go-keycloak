@@ -129,26 +129,6 @@ func (b *baseService) IntrospectRequestingPartyToken(ctx context.Context, rawRPT
 	return results, nil
 }
 
-// ParseToken will attempt to parse and validate a raw token into a modeled type.  If this method does not return
-// an error, you can safely assume the provided raw token is safe for use.
-func (b *baseService) ParseToken(ctx context.Context, rawToken string, claimsType jwt.Claims) (*jwt.Token, error) {
-	var (
-		jwtToken *jwt.Token
-		err      error
-	)
-	if ctx, err = b.c.RequireRealm(ctx); err != nil {
-		return nil, err
-	}
-	ctx = IssuerAddressContext(ctx, b.c.IssuerAddress())
-	if claimsType == nil {
-		claimsType = new(StandardClaims)
-	}
-	if jwtToken, err = jwt.ParseWithClaims(rawToken, claimsType, b.keyFunc(ctx)); err != nil {
-		return nil, fmt.Errorf("error parsing raw token into %T: %w", claimsType, err)
-	}
-	return jwtToken, nil
-}
-
 // ClientEntitlement will attempt to call the pre-uma2 entitlement endpoint to return a Requesting Party Token
 // containing details about what aspects of the provided clientID the token for this request has access to, if any.
 // DEPRECATED: use the newer introspection workflow for  instances newer than 3.4
@@ -181,13 +161,6 @@ func (b *baseService) ClientEntitlement(ctx context.Context, clientID string, cl
 	}
 
 	return b.ParseToken(ctx, rptResp.RPT, claimsType)
-}
-
-// TODO: add this as method on TokenParser?
-func (b *baseService) keyFunc(ctx context.Context) jwt.Keyfunc {
-	return func(token *jwt.Token) (interface{}, error) {
-		return b.c.tokenParser.Parse(ctx, b.c, token)
-	}
 }
 
 func (b *baseService) callRealms(ctx context.Context, method, requestPath string, body interface{}, mutators ...RequestMutator) (*http.Response, error) {

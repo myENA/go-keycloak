@@ -1,14 +1,11 @@
 package keycloak
 
 import (
-	"context"
 	"crypto/ecdsa"
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/base64"
 	"fmt"
-	"sync"
-	"time"
 
 	"github.com/dgrijalva/jwt-go"
 )
@@ -16,15 +13,10 @@ import (
 // TokenParser
 type TokenParser interface {
 	// Parse must attempt to validate the provided token was signed using the mechanism expected by the realm's issuer
-	//
-	// The context provided to this method will contain at least the following two keys:
-	//	- keycloak_realm
-	//	- issuer_address
 	Parse(RealmIssuerConfiguration, *jwt.Token) (pk interface{}, err error)
 }
 
 type X509TokenParser struct {
-	mu sync.Mutex
 }
 
 func NewX509TokenParser() *X509TokenParser {
@@ -33,9 +25,6 @@ func NewX509TokenParser() *X509TokenParser {
 }
 
 func (xtp *X509TokenParser) Parse(conf RealmIssuerConfiguration, token *jwt.Token) (interface{}, error) {
-	xtp.mu.Lock()
-	defer xtp.mu.Unlock()
-
 	var (
 		decoded []byte
 		pub     interface{}

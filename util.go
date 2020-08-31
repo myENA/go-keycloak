@@ -19,10 +19,15 @@ import (
 	"github.com/rs/zerolog"
 )
 
-// RequestBearerToken attempts to extract the encoded "Bearer" token from the provided requests "Authorization" header
+// RequestBearerToken attempts to extract the encoded "Bearer" token from the provided request's "Authorization" header
 func RequestBearerToken(request *http.Request) (string, bool) {
-	if v := request.Header[httpHeaderAuthorization]; len(v) == 1 && strings.HasPrefix(v[0], httpHeaderAuthorizationBearerPrefix) {
-		return strings.TrimPrefix(v[0], httpHeaderAuthorizationBearerPrefix), true
+	if request == nil {
+		return "", false
+	}
+	for _, v := range request.Header.Values(httpHeaderAuthorization) {
+		if strings.HasPrefix(v, httpHeaderAuthorizationBearerPrefix) {
+			return strings.TrimPrefix(v, httpHeaderAuthorizationBearerPrefix+" "), true
+		}
 	}
 	return "", false
 }
@@ -137,8 +142,8 @@ func compileBaseConfig(provided *APIClientConfig, mutators ...ConfigMutator) *AP
 	}
 
 	// config cache
-	if provided.RealmConfigCache != nil {
-		actual.RealmConfigCache = provided.RealmConfigCache
+	if provided.RealmConfigProvider != nil {
+		actual.RealmConfigProvider = provided.RealmConfigProvider
 	}
 
 	// url paths
