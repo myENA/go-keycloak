@@ -33,53 +33,18 @@ func NewAuthService(client *APIClient) *AuthService {
 	return as
 }
 
-// RealmIssuerConfiguration returns metadata about the  instance being connected to, such as the public key for
-// token signing
-func (k *baseService) RealmIssuerConfiguration(ctx context.Context) (*RealmIssuerConfiguration, error) {
-	var (
-		requestPath string
-		resp        *http.Response
-		ic          *RealmIssuerConfiguration
-		err         error
-	)
-	if ctx, err = k.c.RequireRealm(ctx); err != nil {
-		return nil, err
-	}
-	if requestPath, err = k.realmsPath(ctx); err != nil {
-		return nil, err
-	}
-	ctx = context.WithValue(ctx, ContextKeyToken, nil)
-	if resp, err = k.c.CallRequireOK(ctx, http.MethodGet, requestPath, nil); err != nil {
-		return nil, err
-	}
-	ic = new(RealmIssuerConfiguration)
-	if err = handleResponse(resp, ic); err != nil {
-		return nil, err
-	}
-	return ic, nil
-}
-
 // OpenIDConfiguration returns OpenID Configuration metadata about a realm in the  instance being connected
 // to.  This endpoint exists across both 3.4 and newer versions of .
-func (k *baseService) OpenIDConfiguration(ctx context.Context) (*OpenIDConfiguration, error) {
+func (b *baseService) OpenIDConfiguration(ctx context.Context) (*OpenIDConfiguration, error) {
 	var (
-		requestPath string
-		resp        *http.Response
-		oidc        *OpenIDConfiguration
-		err         error
+		resp *http.Response
+		oidc *OpenIDConfiguration
+		err  error
 	)
-	if ctx, err = k.c.RequireRealm(ctx); err != nil {
-		return nil, err
-	}
-	if requestPath, err = k.realmsPath(ctx, kcPathOIDC); err != nil {
-		return nil, err
-	}
 	ctx = context.WithValue(ctx, ContextKeyToken, nil)
-	if resp, err = k.c.CallRequireOK(ctx, http.MethodGet, requestPath, nil); err != nil {
-		return nil, err
-	}
+	resp, err = b.c.Call(ctx, http.MethodGet, b.realmsPath(kcPathOIDC), nil)
 	oidc = new(OpenIDConfiguration)
-	if err = handleResponse(resp, oidc); err != nil {
+	if err = handleResponse(resp, http.StatusOK, oidc, err); err != nil {
 		return nil, err
 	}
 	return oidc, nil
@@ -87,32 +52,23 @@ func (k *baseService) OpenIDConfiguration(ctx context.Context) (*OpenIDConfigura
 
 // UMA2Configuration returns UMA2 configuration metadata about a realm in the  instance being connected to.
 // This endpoint only exists in versions of  newer than 4
-func (k *baseService) UMA2Configuration(ctx context.Context) (*UMA2Configuration, error) {
+func (b *baseService) UMA2Configuration(ctx context.Context) (*UMA2Configuration, error) {
 	var (
-		requestPath string
-		resp        *http.Response
-		uma2c       *UMA2Configuration
-		err         error
+		resp  *http.Response
+		uma2c *UMA2Configuration
+		err   error
 	)
-	if ctx, err = k.c.RequireRealm(ctx); err != nil {
-		return nil, err
-	}
-	if requestPath, err = k.realmsPath(ctx, kcPathUMA2C); err != nil {
-		return nil, err
-	}
 	ctx = context.WithValue(ctx, ContextKeyToken, nil)
-	if resp, err = k.c.CallRequireOK(ctx, http.MethodGet, requestPath, nil); err != nil {
-		return nil, err
-	}
+	resp, err = b.c.Call(ctx, http.MethodGet, b.realmsPath(kcPathUMA2C), nil)
 	uma2c = new(UMA2Configuration)
-	if err = handleResponse(resp, uma2c); err != nil {
+	if err = handleResponse(resp, http.StatusOK, uma2c, err); err != nil {
 		return nil, err
 	}
 	return uma2c, err
 }
 
 // OpenIDConnectToken is the starting point for all authorization requests
-func (k *baseService) OpenIDConnectToken(ctx context.Context, req OpenIDConnectTokenRequest) (*OpenIDConnectToken, error) {
+func (b *baseService) OpenIDConnectToken(ctx context.Context, req *OpenIDConnectTokenRequest) (*OpenIDConnectToken, error) {
 	var (
 		requestPath string
 		body        url.Values
@@ -120,32 +76,30 @@ func (k *baseService) OpenIDConnectToken(ctx context.Context, req OpenIDConnectT
 		token       *OpenIDConnectToken
 		err         error
 	)
-	if ctx, err = k.c.RequireRealm(ctx); err != nil {
+	if ctx, err = b.c.RequireRealm(ctx); err != nil {
 		return nil, err
 	}
-	if requestPath, err = k.realmsPath(ctx, oidcTokenBits...); err != nil {
+	if requestPath, err = b.realmsPath(ctx, oidcTokenBits...); err != nil {
 		return nil, err
 	}
 	if body, err = query.Values(req); err != nil {
 		return nil, fmt.Errorf("error encoding request: %w", err)
 	}
-	resp, err = k.c.CallRequireOK(
+	fmt.Println(body.Encode())
+	resp, err = b.c.Call(
 		ctx,
 		http.MethodPost,
 		requestPath,
 		strings.NewReader(body.Encode()),
 		HeaderMutator(httpHeaderContentType, httpHeaderValueFormURLEncoded, true))
-	if err != nil {
-		return nil, err
-	}
 	token = new(OpenIDConnectToken)
-	if err = handleResponse(resp, token); err != nil {
+	if err = handleResponse(resp, http.StatusOK, token, err); err != nil {
 		return nil, err
 	}
 	return token, nil
 }
 
-func (k *baseService) IntrospectRequestingPartyToken(ctx context.Context, rawRPT string) (*TokenIntrospectionResults, error) {
+func (b *baseService) IntrospectRequestingPartyToken(ctx context.Context, rawRPT string) (*TokenIntrospectionResults, error) {
 	var (
 		requestPath string
 		body        url.Values
@@ -153,26 +107,23 @@ func (k *baseService) IntrospectRequestingPartyToken(ctx context.Context, rawRPT
 		results     *TokenIntrospectionResults
 		err         error
 	)
-	if ctx, err = k.c.RequireRealm(ctx); err != nil {
+	if ctx, err = b.c.RequireRealm(ctx); err != nil {
 		return nil, err
 	}
-	if requestPath, err = k.realmsPath(ctx, oidcTokenIntrospectBits...); err != nil {
+	if requestPath, err = b.realmsPath(ctx, oidcTokenIntrospectBits...); err != nil {
 		return nil, err
 	}
 	body = make(url.Values)
-	body.Add("token_type_hint", "requesting_party_token")
-	body.Add("token", rawRPT)
-	resp, err = k.c.CallRequireOK(
+	body.Add(paramTokenTypeHint, TokenTypeHintRequestingPartyToken)
+	body.Add(paramTypeToken, rawRPT)
+	resp, err = b.c.Call(
 		ctx,
 		http.MethodPost,
 		requestPath,
 		strings.NewReader(body.Encode()),
 		HeaderMutator(httpHeaderContentType, httpHeaderValueFormURLEncoded, true))
-	if err != nil {
-		return nil, err
-	}
 	results = new(TokenIntrospectionResults)
-	if err = handleResponse(resp, results); err != nil {
+	if err = handleResponse(resp, http.StatusOK, results, err); err != nil {
 		return nil, err
 	}
 	return results, nil
@@ -180,19 +131,19 @@ func (k *baseService) IntrospectRequestingPartyToken(ctx context.Context, rawRPT
 
 // ParseToken will attempt to parse and validate a raw token into a modeled type.  If this method does not return
 // an error, you can safely assume the provided raw token is safe for use.
-func (k *baseService) ParseToken(ctx context.Context, rawToken string, claimsType jwt.Claims) (*jwt.Token, error) {
+func (b *baseService) ParseToken(ctx context.Context, rawToken string, claimsType jwt.Claims) (*jwt.Token, error) {
 	var (
 		jwtToken *jwt.Token
 		err      error
 	)
-	if ctx, err = k.c.RequireRealm(ctx); err != nil {
+	if ctx, err = b.c.RequireRealm(ctx); err != nil {
 		return nil, err
 	}
-	ctx = IssuerAddressContext(ctx, k.c.IssuerAddress())
+	ctx = IssuerAddressContext(ctx, b.c.IssuerAddress())
 	if claimsType == nil {
 		claimsType = new(StandardClaims)
 	}
-	if jwtToken, err = jwt.ParseWithClaims(rawToken, claimsType, k.keyFunc(ctx)); err != nil {
+	if jwtToken, err = jwt.ParseWithClaims(rawToken, claimsType, b.keyFunc(ctx)); err != nil {
 		return nil, fmt.Errorf("error parsing raw token into %T: %w", claimsType, err)
 	}
 	return jwtToken, nil
@@ -201,7 +152,7 @@ func (k *baseService) ParseToken(ctx context.Context, rawToken string, claimsTyp
 // ClientEntitlement will attempt to call the pre-uma2 entitlement endpoint to return a Requesting Party Token
 // containing details about what aspects of the provided clientID the token for this request has access to, if any.
 // DEPRECATED: use the newer introspection workflow for  instances newer than 3.4
-func (k *baseService) ClientEntitlement(ctx context.Context, clientID string, claimsType jwt.Claims) (*jwt.Token, error) {
+func (b *baseService) ClientEntitlement(ctx context.Context, clientID string, claimsType jwt.Claims) (*jwt.Token, error) {
 	var (
 		resp *http.Response
 		err  error
@@ -212,72 +163,41 @@ func (k *baseService) ClientEntitlement(ctx context.Context, clientID string, cl
 	)
 
 	// construct context fully, including token, realm, and issuer address
-	if ctx, err = k.c.RequireAllContextValues(ctx); err != nil {
+	if ctx, err = b.c.RequireAllContextValues(ctx); err != nil {
 		return nil, err
 	}
-	ctx = IssuerAddressContext(ctx, k.c.IssuerAddress())
+	ctx = IssuerAddressContext(ctx, b.c.IssuerAddress())
 
 	// compile request path manually based on above context
-	requestPath, err := k.realmsPath(ctx, path.Join(kcPathPrefixEntitlement, clientID))
+	requestPath, err := b.realmsPath(ctx, path.Join(kcPathPrefixEntitlement, clientID))
 	if err != nil {
 		return nil, err
 	}
 
 	// execute request.
-	if resp, err = k.c.CallRequireOK(ctx, http.MethodGet, requestPath, nil); err != nil {
+	resp, err = b.c.Call(ctx, http.MethodGet, requestPath, nil)
+	if err = handleResponse(resp, http.StatusOK, rptResp, err); err != nil {
 		return nil, err
 	}
 
-	if err = handleResponse(resp, rptResp); err != nil {
-		return nil, err
-	}
-
-	return k.ParseToken(ctx, rptResp.RPT, claimsType)
+	return b.ParseToken(ctx, rptResp.RPT, claimsType)
 }
 
 // TODO: add this as method on TokenParser?
-func (k *baseService) keyFunc(ctx context.Context) jwt.Keyfunc {
+func (b *baseService) keyFunc(ctx context.Context) jwt.Keyfunc {
 	return func(token *jwt.Token) (interface{}, error) {
-		return k.c.tokenParser.Parse(ctx, k.c, token)
+		return b.c.tokenParser.Parse(ctx, b.c, token)
 	}
 }
 
-// apiPath builds a request path under the /auth... path
-func (k baseService) apiPath(bits ...string) string {
-	if len(bits) == 0 {
-		return k.c.pathPrefix
-	}
-	return fmt.Sprintf(apiPathFormat, k.c.pathPrefix, path.Join(bits...))
-}
-
-// realmsPath builds a request path under the /realms/{realm}/... path
-func (k *baseService) realmsPath(ctx context.Context, bits ...string) (string, error) {
-	if realm, ok := contextStringValue(ctx, ContextKeyRealm); ok {
-		return fmt.Sprintf(kcURLPathRealmsFormat, k.c.pathPrefix, realm, path.Join(bits...)), nil
-	}
-	return "", errors.New("context does not contain realm value")
-}
-
-func (k *baseService) callRealms(ctx context.Context, method, requestPath string, body interface{}, mutators ...RequestMutator) (*http.Response, error) {
+func (b *baseService) callRealms(ctx context.Context, method, requestPath string, body interface{}, mutators ...RequestMutator) (*http.Response, error) {
 	var err error
-	if ctx, err = k.c.RequireAllContextValues(ctx); err != nil {
+	if ctx, err = b.c.RequireAllContextValues(ctx); err != nil {
 		return nil, err
 	}
-	requestPath, err = k.realmsPath(ctx, requestPath)
+	requestPath, err = b.realmsPath(ctx, requestPath)
 	if err != nil {
 		return nil, err
 	}
-	return k.c.Call(ctx, method, requestPath, body, mutators...)
-}
-
-func (k *baseService) callRealmsRequireOK(ctx context.Context, method, requestPath string, body interface{}, mutators ...RequestMutator) (*http.Response, error) {
-	var err error
-	if ctx, err = k.c.RequireAllContextValues(ctx); err != nil {
-		return nil, err
-	}
-	requestPath, err = k.realmsPath(ctx, requestPath)
-	if err != nil {
-		return nil, err
-	}
-	return k.c.CallRequireOK(ctx, method, requestPath, body, mutators...)
+	return b.c.Call(ctx, method, requestPath, body, mutators...)
 }

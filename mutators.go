@@ -13,14 +13,14 @@ const (
 
 // ConfigMutator
 //
-// ConfigMutator provides some flexibility when constructing a client
+// ConfigMutator provides some flexibility when constructing an api client
 type ConfigMutator func(*APIClientConfig)
 
 // RequestMutator
 //
 // This callback func type allows you to modify any *http.Request executed by the client in this package once it has
 // been built.
-type RequestMutator func(*Request) error
+type RequestMutator func(*APIRequest) error
 
 // ValuedParameterFormatter
 //
@@ -85,11 +85,11 @@ func DefaultValuedParameterFormatter(_, _ string, v interface{}) (string, bool) 
 
 // QueryMutator will return a RequestMutator that either sets or adds a query parameter and value
 func QueryMutator(k, v string, override bool) RequestMutator {
-	return func(r *Request) error {
+	return func(r *APIRequest) error {
 		if override {
-			r.Query().Set(k, v)
+			r.SetQueryParameter(k, []string{v})
 		} else {
-			r.Query().Add(k, v)
+			r.AddQueryParameter(k, []string{v})
 		}
 		return nil
 	}
@@ -105,11 +105,11 @@ func ValuedQueryMutator(k string, v interface{}, override bool) RequestMutator {
 
 // HeaderMutator returns a RequestMutator that will add or override a value in the header of the request
 func HeaderMutator(k, v string, override bool) RequestMutator {
-	return func(r *Request) error {
+	return func(r *APIRequest) error {
 		if override {
-			r.Header.Set(k, v)
+			r.SetHeader(k, v)
 		} else {
-			r.Header.Add(k, v)
+			r.AddHeader(k, v)
 		}
 		return nil
 	}
@@ -125,17 +125,17 @@ func ValuedHeaderMutator(k string, v interface{}, override bool) RequestMutator 
 }
 
 func bearerTokenMutator(rawToken string) RequestMutator {
-	return func(r *Request) error {
+	return func(r *APIRequest) error {
 		if rawToken != "" {
-			r.Header.Set(httpHeaderAuthorization, fmt.Sprintf(httpHeaderAuthValueFormat, rawToken))
+			r.SetHeader(httpHeaderAuthorization, fmt.Sprintf(httpHeaderAuthValueFormat, rawToken))
 		}
 		return nil
 	}
 }
 
-type requestMutatorRunner func(req *Request, mutators ...RequestMutator) (int, error)
+type requestMutatorRunner func(req *APIRequest, mutators ...RequestMutator) (int, error)
 
-func baseRequestMutatorRunner(req *Request, mutators ...RequestMutator) (int, error) {
+func baseRequestMutatorRunner(req *APIRequest, mutators ...RequestMutator) (int, error) {
 	if len(mutators) == 0 {
 		return 0, nil
 	}
@@ -173,7 +173,7 @@ func debugRequestMutatorRunner(c *DebugConfig) requestMutatorRunner {
 		staticLen += l
 	}
 
-	return func(req *Request, mutators ...RequestMutator) (int, error) {
+	return func(req *APIRequest, mutators ...RequestMutator) (int, error) {
 		var (
 			m RequestMutator
 			i int

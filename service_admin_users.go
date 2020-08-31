@@ -27,7 +27,7 @@ func (us *AdminUsersService) List(ctx context.Context, email, firstName, lastNam
 		users Users
 		err   error
 	)
-	resp, err = us.kas.callAdminRealmsRequireOK(
+	resp, err = us.kas.callAdminRealms(
 		ctx,
 		http.MethodGet,
 		kcPathPartUsers,
@@ -39,11 +39,8 @@ func (us *AdminUsersService) List(ctx context.Context, email, firstName, lastNam
 		ValuedQueryMutator("search", search, true),
 		ValuedQueryMutator("first", first, true),
 		ValuedQueryMutator("max", max, true))
-	if err != nil {
-		return nil, err
-	}
 	users = make(Users, 0)
-	if err = handleResponse(resp, &users); err != nil {
+	if err = handleResponse(resp, http.StatusOK, &users, err); err != nil {
 		return nil, err
 	}
 	return users, nil
@@ -56,12 +53,9 @@ func (us *AdminUsersService) Count(ctx context.Context) (int, error) {
 		count int
 		err   error
 	)
-	resp, err = us.kas.callAdminRealmsRequireOK(ctx, http.MethodGet, path.Join(kcPathPartUsers, kcPathPartCount), nil)
-	if err != nil {
-		return 0, err
-	}
+	resp, err = us.kas.callAdminRealms(ctx, http.MethodGet, path.Join(kcPathPartUsers, kcPathPartCount), nil)
 	// ok to not check handle response separately as zero-val for int is same whether or not there is an error
-	return count, handleResponse(resp, &count)
+	return count, handleResponse(resp, http.StatusOK, &count, err)
 }
 
 // Get attempts to query  for a specific user based on their ID
@@ -71,12 +65,9 @@ func (us *AdminUsersService) Get(ctx context.Context, userID string) (*User, err
 		user *User
 		err  error
 	)
-	resp, err = us.kas.callAdminRealmsRequireOK(ctx, http.MethodGet, path.Join(kcPathPartUsers, userID), nil)
-	if err != nil {
-		return nil, err
-	}
+	resp, err = us.kas.callAdminRealms(ctx, http.MethodGet, path.Join(kcPathPartUsers, userID), nil)
 	user = new(User)
-	if err = handleResponse(resp, user); err != nil {
+	if err = handleResponse(resp, http.StatusOK, user, err); err != nil {
 		return nil, err
 	}
 	return user, nil
@@ -88,8 +79,8 @@ func (us *AdminUsersService) Create(ctx context.Context, user *UserCreate) ([]st
 		resp *http.Response
 		err  error
 	)
-	resp, err = us.kas.callAdminRealmsRequireOK(ctx, http.MethodPost, kcPathPartUsers, user)
-	if err != nil {
+	resp, err = us.kas.callAdminRealms(ctx, http.MethodPost, kcPathPartUsers, user)
+	if err = handleResponse(resp, http.StatusOK, nil, err); err != nil {
 		return nil, err
 	}
 	return parseAndReturnLocations(resp)
@@ -97,14 +88,14 @@ func (us *AdminUsersService) Create(ctx context.Context, user *UserCreate) ([]st
 
 // Update attempts to push an updated user definition
 func (us *AdminUsersService) Update(ctx context.Context, userID string, user *User) error {
-	_, err := us.kas.callAdminRealmsRequireOK(ctx, http.MethodPut, path.Join(kcPathPartUsers, userID), user)
-	return err
+	resp, err := us.kas.callAdminRealms(ctx, http.MethodPut, path.Join(kcPathPartUsers, userID), user)
+	return handleResponse(resp, http.StatusOK, nil, err)
 }
 
 // Delete attempts to delete a user from the keycloak realm
 func (us *AdminUsersService) Delete(ctx context.Context, userID string) error {
-	_, err := us.kas.callAdminRealmsRequireOK(ctx, http.MethodDelete, path.Join(kcPathPartUsers, userID), nil)
-	return err
+	resp, err := us.kas.callAdminRealms(ctx, http.MethodDelete, path.Join(kcPathPartUsers, userID), nil)
+	return handleResponse(resp, http.StatusOK, nil, err)
 }
 
 type AdminUserGroupsService struct {
@@ -134,12 +125,9 @@ func (gs *AdminUserGroupsService) List(ctx context.Context) (Groups, error) {
 		groups Groups
 		err    error
 	)
-	resp, err = gs.kas.callAdminRealmsRequireOK(ctx, http.MethodGet, path.Join(kcPathPartUsers, gs.userID, kcPathPartGroups), nil)
-	if err != nil {
-		return nil, err
-	}
+	resp, err = gs.kas.callAdminRealms(ctx, http.MethodGet, path.Join(kcPathPartUsers, gs.userID, kcPathPartGroups), nil)
 	groups = make(Groups, 0)
-	if err = handleResponse(resp, &groups); err != nil {
+	if err = handleResponse(resp, http.StatusOK, &groups, err); err != nil {
 		return nil, err
 	}
 	return groups, nil
@@ -147,14 +135,14 @@ func (gs *AdminUserGroupsService) List(ctx context.Context) (Groups, error) {
 
 // Add attempts to add the service user to the specified group
 func (gs *AdminUserGroupsService) Add(ctx context.Context, groupID string) error {
-	_, err := gs.kas.callAdminRealmsRequireOK(ctx, http.MethodPut, path.Join(kcPathPartUsers, gs.userID, kcPathPartGroups, groupID), nil)
-	return err
+	resp, err := gs.kas.callAdminRealms(ctx, http.MethodPut, path.Join(kcPathPartUsers, gs.userID, kcPathPartGroups, groupID), nil)
+	return handleResponse(resp, http.StatusOK, nil, err)
 }
 
 // Remove attempts to remove the service user from the specified group
 func (gs *AdminUserGroupsService) Remove(ctx context.Context, groupID string) error {
-	_, err := gs.kas.callAdminRealmsRequireOK(ctx, http.MethodDelete, path.Join(kcPathPartUsers, gs.userID, kcPathPartGroups, groupID), nil)
-	return err
+	resp, err := gs.kas.callAdminRealms(ctx, http.MethodDelete, path.Join(kcPathPartUsers, gs.userID, kcPathPartGroups, groupID), nil)
+	return handleResponse(resp, http.StatusOK, nil, err)
 }
 
 type AdminUserRoleMappingsService struct {
@@ -183,12 +171,9 @@ func (rms *AdminUserRoleMappingsService) Get(ctx context.Context) (*RoleMapping,
 		roleMapping *RoleMapping
 		err         error
 	)
-	resp, err = rms.kas.callAdminRealmsRequireOK(ctx, http.MethodGet, path.Join(kcPathPartUsers, rms.userID, kcPathPartRoleMappings), nil)
-	if err != nil {
-		return nil, err
-	}
+	resp, err = rms.kas.callAdminRealms(ctx, http.MethodGet, path.Join(kcPathPartUsers, rms.userID, kcPathPartRoleMappings), nil)
 	roleMapping = new(RoleMapping)
-	if err = handleResponse(resp, roleMapping); err != nil {
+	if err = handleResponse(resp, http.StatusOK, roleMapping, err); err != nil {
 		return nil, err
 	}
 	return roleMapping, nil
@@ -220,12 +205,9 @@ func (rms *AdminUserRoleMappingRealmsService) List(ctx context.Context) (Roles, 
 		roles Roles
 		err   error
 	)
-	resp, err = rms.kas.callAdminRealmsRequireOK(ctx, http.MethodGet, path.Join(kcPathPartUsers, rms.userID, kcPathPartRoleMappings, kcPathPartRealm), nil)
-	if err != nil {
-		return nil, err
-	}
+	resp, err = rms.kas.callAdminRealms(ctx, http.MethodGet, path.Join(kcPathPartUsers, rms.userID, kcPathPartRoleMappings, kcPathPartRealm), nil)
 	roles = make(Roles, 0)
-	if err = handleResponse(resp, &roles); err != nil {
+	if err = handleResponse(resp, http.StatusOK, &roles, err); err != nil {
 		return nil, err
 	}
 	return roles, nil
@@ -237,17 +219,14 @@ func (rms *AdminUserRoleMappingRealmsService) Available(ctx context.Context) (Ro
 		roles Roles
 		err   error
 	)
-	resp, err = rms.kas.callAdminRealmsRequireOK(
+	resp, err = rms.kas.callAdminRealms(
 		ctx,
 		http.MethodGet,
 		path.Join(kcPathPartUsers, rms.userID, kcPathPartRoleMappings, kcPathPartRealm, kcPathPartAvailable),
 		nil,
 	)
-	if err != nil {
-		return nil, err
-	}
 	roles = make(Roles, 0)
-	if err = handleResponse(resp, &roles); err != nil {
+	if err = handleResponse(resp, http.StatusOK, &roles, err); err != nil {
 		return nil, err
 	}
 	return roles, nil

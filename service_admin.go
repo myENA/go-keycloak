@@ -21,34 +21,13 @@ func NewAdminService(c *APIClient) *AdminService {
 	return kc
 }
 
-// AdminRealmsPath builds a request path under the /admin/realms/{realm}/... path
-func (k AdminService) adminRealmsPath(ctx context.Context, bits ...string) (string, error) {
-	if realm, ok := contextStringValue(ctx, ContextKeyRealm); ok {
-		return fmt.Sprintf(kcURLPathAdminRealmsFormat, k.c.pathPrefix, realm, path.Join(bits...)), nil
-	}
-	return "", errors.New("context does not contain realm value")
-}
-
 func (k *AdminService) callAdminRealms(ctx context.Context, method, requestPath string, body interface{}, mutators ...RequestMutator) (*http.Response, error) {
 	var err error
-	if ctx, err = k.c.RequireAllContextValues(ctx); err != nil {
-		return nil, err
-	}
-	requestPath, err = k.adminRealmsPath(ctx, requestPath)
-	if err != nil {
-		return nil, err
-	}
-	return k.c.Call(ctx, method, requestPath, body, mutators...)
-}
-
-func (k *AdminService) callAdminRealmsRequireOK(ctx context.Context, method, requestPath string, body interface{}, mutators ...RequestMutator) (*http.Response, error) {
-	var err error
-
 	if ctx, err = k.c.RequireAllContextValues(ctx); err != nil {
 		return nil, err
 	}
 	if requestPath, err = k.adminRealmsPath(ctx, requestPath); err != nil {
 		return nil, err
 	}
-	return k.c.CallRequireOK(ctx, method, requestPath, body, mutators...)
+	return k.c.Call(ctx, method, requestPath, body, mutators...)
 }

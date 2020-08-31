@@ -13,20 +13,12 @@ const (
 	DefaultTokenExpirationMargin = 2 * time.Second
 )
 
-var (
-	// todo: don't like this, pull from .well-known endpoints.
-	oidcTokenBits           = []string{"protocol", "openid-connect", "token"}
-	oidcTokenIntrospectBits = append(oidcTokenBits, "introspect")
-)
-
 // TokenProvider
 //
 // This interface describes any implementation that can provide a bearer token to the given context.
 type TokenProvider interface {
-	// SetTokenValue MUST either return a context with the token key defined, or the original context with an error
-	// describing why it was unable to do so.  It must also defer to any pre-defined key value already present in the
-	// context.
-	SetTokenValue(context.Context, *APIClient) (context.Context, error)
+	// BearerToken must return either a valid bearer token suitable for immediate use or an error
+	BearerToken(context.Context, *RealmAPIClient) (string, error)
 }
 
 // ConfidentialClientTokenProviderConfig must be provided to a new ConfidentialClientTokenProvider upon construction
@@ -61,7 +53,7 @@ type ConfidentialClientTokenProviderConfig struct {
 // Now, every request called off of the APIClient will be automatically decorated with the correct bearer token,
 // assuming your install document is valid.
 type ConfidentialClientTokenProvider struct {
-	mu sync.RWMutex
+	mu sync.Mutex
 
 	clientID       string
 	clientSecret   string
@@ -117,84 +109,86 @@ func NewConfidentialClientTokenProvider(conf *ConfidentialClientTokenProviderCon
 
 // LastRefreshed returns a unix nano timestamp of the last time this client's bearer token was refreshed.
 func (tp *ConfidentialClientTokenProvider) LastRefreshed() int64 {
-	tp.mu.RLock()
-	defer tp.mu.RUnlock()
+	tp.mu.Lock()
+	defer tp.mu.Unlock()
 	lr := tp.tokenRefreshed
 	return lr
 }
 
 // Expiry returns a unix nano timestamp of when the current token, if defined, expires.
 func (tp *ConfidentialClientTokenProvider) Expiry() int64 {
-	tp.mu.RLock()
-	defer tp.mu.RUnlock()
+	tp.mu.Lock()
+	defer tp.mu.Unlock()
 	e := tp.tokenExpiry
 	return e
 }
 
-// Expired will return true if the currently stored token has expired
-func (tp *ConfidentialClientTokenProvider) Expired() bool {
-	tp.mu.RLock()
-	defer tp.mu.RUnlock()
+func (tp *ConfidentialClientTokenProvider) expired() bool {
 	if tp.token == nil {
 		return true
 	}
 	return time.Now().After(time.Unix(0, tp.tokenExpiry))
 }
 
-// RefreshToken will try to do just that.
-func (tp *ConfidentialClientTokenProvider) RefreshToken(ctx context.Context, client *APIClient) error {
+// Expired will return true if the currently stored token has expired
+func (tp *ConfidentialClientTokenProvider) Expired() bool {
 	tp.mu.Lock()
 	defer tp.mu.Unlock()
+	return tp.expired()
+}
 
+func (tp *ConfidentialClientTokenProvider) doRefresh(ctx context.Context, client *RealmAPIClient) (string, error) {
 	var (
-		authCtx context.Context
-		oidc    *OpenIDConnectToken
-		req     OpenIDConnectTokenRequest
-		err     error
+		oidc *OpenIDConnectToken
+		err  error
+
+		req = NewOpenIDConnectTokenRequest(GrantTypeClientCredentials)
 	)
 
-	// create new context with realm value overloaded to install document source realm
-	authCtx = RealmContext(ctx, tp.clientRealm)
-
 	// attempt to fetch a new openid token for our confidential client
-	req = OpenIDConnectTokenRequest{
-		ClientID:     tp.clientID,
-		ClientSecret: tp.clientSecret,
-		GrantType:    GrantTypeClientCredentials,
-	}
-
-	// explicitly override any existing token value
-	authCtx = context.WithValue(authCtx, ContextKeyToken, nil)
+	req.ClientID = tp.clientID
+	req.ClientSecret = tp.clientSecret
 
 	// fetch new oidc token
-	if oidc, err = client.AuthService().OpenIDConnectToken(authCtx, req); err != nil {
-		return fmt.Errorf("unable to fetch OpenIDConnectToken: %w", err)
+	if oidc, err = client.AuthService().OpenIDConnectToken(ctx, req); err != nil {
+		return "", fmt.Errorf("unable to fetch OpenIDConnectToken: %w", err)
 	}
 
 	// try to refresh access token.  this has the side-effect of also validating our new token
-	if _, err = client.AuthService().ParseToken(authCtx, oidc.AccessToken, nil); err != nil {
-		return fmt.Errorf("unable to refresh access token: %w", err)
+	if _, err = client.AuthService().ParseToken(ctx, oidc.AccessToken, nil); err != nil {
+		return "", fmt.Errorf("unable to refresh access token: %w", err)
 	}
 
 	// if valid, update client
 	tp.token = oidc
 	tp.tokenRefreshed = time.Now().UnixNano()
 	tp.tokenExpiry = time.Now().Add((time.Duration(oidc.ExpiresIn) * time.Second) - tp.expiryMargin).UnixNano()
-	return nil
+	return tp.token.AccessToken, nil
+}
+
+// RefreshToken provides an external way to manually refresh a bearer token
+func (tp *ConfidentialClientTokenProvider) RefreshToken(ctx context.Context, client *RealmAPIClient) (string, error) {
+	tp.mu.Lock()
+	defer tp.mu.Unlock()
+	return tp.doRefresh(ctx, client)
 }
 
 // SetTokenValue will first attempt to use the locally cached last-known-good token.  If not defined or beyond the
 // expiration window, it will call RefreshToken before attempting to set the context token value.
-func (tp *ConfidentialClientTokenProvider) SetTokenValue(ctx context.Context, client *APIClient) (context.Context, error) {
-	if _, ok := ContextToken(ctx); ok {
-		return ctx, nil
+func (tp *ConfidentialClientTokenProvider) BearerToken(ctx context.Context, client *RealmAPIClient) (string, error) {
+	tp.mu.Lock()
+	defer tp.mu.Unlock()
+
+	var (
+		token string
+		err   error
+	)
+
+	if tp.expired() {
+		token, err = tp.doRefresh(ctx, client)
+	} else {
+		token = tp.token.AccessToken
 	}
 
-	if tp.Expired() {
-		if err := tp.RefreshToken(ctx, client); err != nil {
-			return ctx, err
-		}
-	}
-
-	return TokenContext(ctx, tp.token.AccessToken), nil
+	return token, err
 }

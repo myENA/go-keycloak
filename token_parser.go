@@ -20,70 +20,39 @@ type TokenParser interface {
 	// The context provided to this method will contain at least the following two keys:
 	//	- keycloak_realm
 	//	- issuer_address
-	Parse(context.Context, *APIClient, *jwt.Token) (pk interface{}, err error)
+	Parse(RealmIssuerConfiguration, *jwt.Token) (pk interface{}, err error)
 }
 
 type X509TokenParser struct {
-	mu       sync.Mutex
-	cacheTTL time.Duration
+	mu sync.Mutex
 }
 
-func NewX509TokenParser(cacheTTL time.Duration) *X509TokenParser {
+func NewX509TokenParser() *X509TokenParser {
 	xtp := new(X509TokenParser)
-	if cacheTTL > 0 {
-		xtp.cacheTTL = cacheTTL
-	} else {
-		xtp.cacheTTL = 24 * time.Hour
-	}
 	return xtp
 }
 
-func (xtp *X509TokenParser) Parse(ctx context.Context, client *APIClient, token *jwt.Token) (interface{}, error) {
+func (xtp *X509TokenParser) Parse(conf RealmIssuerConfiguration, token *jwt.Token) (interface{}, error) {
 	xtp.mu.Lock()
 	defer xtp.mu.Unlock()
 
 	var (
-		issuer string
-		realm  string
-		pub    interface{}
-		rpk    *rsa.PublicKey
-		epk    *ecdsa.PublicKey
-		ok     bool
-		err    error
+		decoded []byte
+		pub     interface{}
+		rpk     *rsa.PublicKey
+		epk     *ecdsa.PublicKey
+		ok      bool
+		err     error
 	)
 
-	// extract expected values from context
-	if issuer, ok = ContextIssuerAddress(ctx); !ok {
-		return nil, fmt.Errorf("context is missing %q key", ContextKeyIssuerAddress)
-	}
-	if realm, ok = ContextRealm(ctx); !ok {
-		return nil, fmt.Errorf("context is missing %q key", ContextKeyRealm)
+	// attempt to decode
+	if decoded, err = base64.StdEncoding.DecodeString(conf.PublicKey); err != nil {
+		return nil, fmt.Errorf("error decoding public key: %w", err)
 	}
 
-	// first attempt to retrieve previously parsed public key for this issuer : realm combination
-	if pub, ok = globalPublicKeyCache.Load(issuer, realm); !ok {
-		var (
-			conf    *RealmIssuerConfiguration
-			decoded []byte
-		)
-
-		// if not found, attempt to realm's public key from issuer configuration
-		if conf, err = client.AuthService().RealmIssuerConfiguration(ctx); err != nil {
-			return "", fmt.Errorf("error fetching public configuration: %w", err)
-		}
-
-		// attempt to decode
-		if decoded, err = base64.StdEncoding.DecodeString(conf.PublicKey); err != nil {
-			return nil, fmt.Errorf("error decoding public key: %w", err)
-		}
-
-		// attempt to parse x509 public key
-		if pub, err = x509.ParsePKIXPublicKey(decoded); err != nil {
-			return nil, fmt.Errorf("error parsing public key: %w", err)
-		}
-
-		// if successful, add entry to cache
-		globalPublicKeyCache.Store(issuer, realm, pub, xtp.cacheTTL)
+	// attempt to parse x509 public key
+	if pub, err = x509.ParsePKIXPublicKey(decoded); err != nil {
+		return nil, fmt.Errorf("error parsing public key: %w", err)
 	}
 
 	// perform some basic type assertions

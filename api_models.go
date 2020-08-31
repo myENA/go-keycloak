@@ -232,20 +232,20 @@ nbf = not before
 sub = subject
 */
 
-type OpenIDConnectTokenPermission struct {
+type PermissionRequestPermission struct {
 	Resource string
 	Scope    string
 }
 
-func NewOpenIDConnectTokenPermission(resource, scope string) OpenIDConnectTokenPermission {
-	return OpenIDConnectTokenPermission{resource, scope}
+func NewOpenIDConnectTokenPermission(resource, scope string) PermissionRequestPermission {
+	return PermissionRequestPermission{resource, scope}
 }
 
-func (p OpenIDConnectTokenPermission) MarshalText() ([]byte, error) {
+func (p PermissionRequestPermission) MarshalText() ([]byte, error) {
 	return []byte(fmt.Sprintf("%s#%s", p.Resource, p.Scope)), nil
 }
 
-func (p *OpenIDConnectTokenPermission) UnmarshalText(b []byte) error {
+func (p *PermissionRequestPermission) UnmarshalText(b []byte) error {
 	if len(b) == 0 {
 		return nil
 	}
@@ -253,48 +253,55 @@ func (p *OpenIDConnectTokenPermission) UnmarshalText(b []byte) error {
 		return fmt.Errorf("expected token \"#\" missing in %q", string(b))
 	}
 	s := strings.SplitN(string(b), "#", 2)
-	*p = OpenIDConnectTokenPermission{s[0], s[1]}
+	*p = PermissionRequestPermission{s[0], s[1]}
 	return nil
 }
 
 type OpenIDConnectTokenRequest struct {
-	// GrantType [required]
-	GrantType string `json:"grant_type,omitempty" url:"grant_type,omitempty"`
+	// GrantType [required] - Type of grant to evaluate
+	// 	- client_credentials
+	// 	- code
+	// 	- urn:ietf:params:oauth:grant-type:uma-ticket
+	GrantType string `json:"grant_type" url:"grant_type"`
 
-	// Permission [optional] - Request specific access to "Resource#scope[,scope...]"
-	Permissions []OpenIDConnectTokenPermission `json:"permission,omitempty" url:"permission,omitempty"`
+	// ClientID [required - grant_type=client_credentials]
+	ClientID string `json:"client_id,omitempty" url:"client_id,omitempty"`
 
-	ClientID     string `json:"client_id,omitempty" url:"client_id,omitempty"`
+	// ClientSecret [required - grant_type=client_credentials]
 	ClientSecret string `json:"client_secret,omitempty" url:"client_secret,omitempty"`
 
-	ClientAssertionType string `json:"client_assertion_type,omitempty" url:"client_assertion_type,omitempty"`
-	ClientAssertion     string `json:"client_assertion,omitempty" url:"client_assertion,omitempty"`
-
-	SubjectToken     string `json:"subject_token,omitempty" url:"subject_token,omitempty"`
-	SubjectIssuer    string `json:"subject_issuer,omitempty" url:"subject_issuer,omitempty"`
-	SubjectTokenType string `json:"subject_token_type,omitempty" url:"subject_token_type,omitempty"`
-
-	RequestedTokenType string `json:"requested_token_type,omitempty" url:"requested_token_type,omitempty"`
-
+	// Audience [optional] - Specific client to request permission for
 	Audience string `json:"audience,omitempty" url:"audience,omitempty"`
 
-	RequestedIssuer  string `json:"requested_issuer,omitempty" url:"requested_issuer,omitempty"`
-	RequestedSubject string `json:"requested_subject,omitempty" url:"requested_subject,omitempty"`
+	// Ticket [optional] - Evaluate based on existing permission ticket
+	Ticket string `json:"ticket,omitempty" url:"ticket,omitempty"`
 
-	// RequestingPartyToken - todo: what exactly does this look like...
+	// ClaimToken [optional] - Additional claims to be considered by the server
+	ClaimToken string `json:"claim_token,omitempty" url:"claim_token,omitempty"`
+
+	// ClaimTokenFormat [optional] - Format of provided claim token
+	//  Allowed values:
+	// 		- urn:ietf:params:oauth:token-type:jwt (claim token is an access token)
+	// 		- https://openid.net/specs/openid-connect-core-1_0.html#IDToken (claim token is an oidc token)
+	ClaimTokenFormat string `json:"claim_token_format,omitempty" url:"claim_token_format,omitempty"`
+
+	// RequestingPartyToken [optional] - Existing RPT whose permissions should be evaluated and added in a new one
 	RequestingPartyToken string `json:"rpt,omitempty" url:"rpt,omitempty"`
 
+	// Permission [optional] - Evaluate specific access to a resource and scope
+	Permissions []PermissionRequestPermission `json:"permission,omitempty" url:"permission,omitempty"`
+
+	// ResponseIncludeResourceName [optional]
 	ResponseIncludeResourceName *bool `json:"response_include_resource_name,omitempty" url:"response_include_resource_name,omitempty"`
 
+	// ResponsePermissionsLimit [optional]
 	ResponsePermissionsLimit *int `json:"response_permissions_limit,omitempty" url:"response_permissions_limit,omitempty"`
 
-	// ResponseMode [optional] - Allowed values: ["decision", "permissions"]
-	ResponseMode string `json:"response_mode,omitempty" url:"response_mode,omitempty"`
-
+	// SubmitRequest [optional]
 	SubmitRequest *bool `json:"submit_request,omitempty" url:"submit_request,omitempty"`
 }
 
-func NewOpenIDConnectTokenRequest(grantType string, permissions ...OpenIDConnectTokenPermission) *OpenIDConnectTokenRequest {
+func NewOpenIDConnectTokenRequest(grantType string, permissions ...PermissionRequestPermission) *OpenIDConnectTokenRequest {
 	r := new(OpenIDConnectTokenRequest)
 	r.GrantType = grantType
 	r.Permissions = permissions
@@ -305,11 +312,19 @@ func NewOpenIDConnectTokenRequest(grantType string, permissions ...OpenIDConnect
 // your own risk.
 func (r *OpenIDConnectTokenRequest) AddPermission(resource, scope string) *OpenIDConnectTokenRequest {
 	if r.Permissions == nil {
-		r.Permissions = make([]OpenIDConnectTokenPermission, 0)
+		r.Permissions = make([]PermissionRequestPermission, 0)
 	}
 	r.Permissions = append(r.Permissions, NewOpenIDConnectTokenPermission(resource, scope))
 	return r
 }
+
+type EvaluatedPermission struct {
+	Scopes       []string `json:"scopes"`
+	ResourceID   string   `json:"rsid"`
+	ResourceName string   `json:"rsname,omitempty"`
+}
+
+type EvaluatedPermissions []*EvaluatedPermission
 
 // Token payload returned from the TokenEndpoint
 type OpenIDConnectToken struct {
@@ -319,7 +334,7 @@ type OpenIDConnectToken struct {
 	RefreshToken     string `json:"refresh_token"`
 	TokenType        string `json:"token_type"`
 	IdToken          string `json:"id_token"`
-	NotBeforePolicy  int    `json:"not_before_policy"`
+	NotBeforePolicy  int    `json:"not-before-policy"`
 	SessionState     string `json:"session_state"`
 }
 

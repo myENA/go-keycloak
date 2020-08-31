@@ -1,4 +1,4 @@
-module github.com/myENA/go-keycloak
+module github.com/myENA/go-keycloak/v2
 
 go 1.15
 

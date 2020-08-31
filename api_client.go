@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"strings"
+	"path"
 	"time"
 
 	"github.com/dgrijalva/jwt-go"
@@ -14,18 +14,21 @@ import (
 )
 
 const (
-	// API Context value keys
-	ContextKeyIssuerAddress = "issuer_address"
-	ContextKeyToken         = "token"
-	ContextKeyRealm         = "keycloak_realm"
-
 	// config defaults
 	DefaultPathPrefix        = "auth"
 	DefaultPublicKeyCacheTTL = 24 * time.Hour
 
 	// grant type values
-	GrantTypeUMATicket         = "urn:ietf:params:oauth:grant-type:uma-ticket"
+	GrantTypeCode              = "code"
+	GrantTypeUMA2Ticket        = "urn:ietf:params:oauth:grant-type:uma-ticket"
 	GrantTypeClientCredentials = "client_credentials"
+
+	// token type hint values
+	TokenTypeHintRequestingPartyToken = "requesting_party_token"
+
+	// response modes
+	ResponseModeDecision    = "decision"
+	ResponseModePermissions = "permissions"
 
 	// public key cache stuff
 	pkKeyFormat = "%s\n%s"
@@ -39,6 +42,11 @@ const (
 	httpHeaderAuthorizationBearerPrefix = "Bearer "
 	httpHeaderAuthValueFormat           = httpHeaderAuthorizationBearerPrefix + "%s"
 	httpHeaderLocationKey               = "Location"
+
+	// permissions params
+	paramResponseMode  = "response_mode"
+	paramTokenTypeHint = "token_type_hint"
+	paramTypeToken     = "token"
 
 	// url structures
 	addressFormat = "%s://%s/"
@@ -93,42 +101,6 @@ type APIClientConfig struct {
 	// See "provider_issuer.go" for available providers.
 	IssuerProvider IssuerProvider
 
-	// RealmProvider [optional]
-	//
-	// The RealmProvider will be called on a per-request basis, depending on if that request needs to have the realm
-	// injected into the context.
-	//
-	// This is used in a few key ways:
-	// -  Public Key retrieval and caching
-	// -  URL construction (i.e. /auth/realms/{realm}/.well-known/openid-configuration)
-	// -  Token validation
-	//
-	// The above is not a comprehensive list, but generally speaking the overwhelming majority of requests require the
-	// realm value to defined.
-	//
-	// See "provider_realm.go" for implementation details.  If you construct a config using DefaultAPIClientConfig(),
-	// you will be expected to provide a context with the realm already defined with each request
-	RealmProvider RealmProvider
-
-	// TokenProvider [optional]
-	//
-	// The TokenProvider will be called on a per-request basis, as it is needed.  Not all requests require a bearer
-	// token.  For example, the OpenID Configuration and Realm Issuer Configuration endpoints are open and simply
-	// require a Realm value.
-	//
-	// As a general rule, however, all  "admin" endpoints (i.e. /auth/admin/realms/{realm}/users) will require
-	// a token.
-	//
-	// See "token_provider.go" for implementation details.  If you construct a config using DefaultAPIClientConfig(),
-	// you will be expected to provide a context with a token already defined with each request
-	TokenProvider TokenProvider
-
-	// TokenParser [optional]
-	//
-	// The TokenParser will be called any time the client needs a realm's public key.  This is primarily used to
-	// validate access and bearer tokens
-	TokenParser TokenParser
-
 	// PathPrefix [optional]
 	//
 	// URL Path prefix.  Defaults to value of DefaultPathPrefix.
@@ -157,22 +129,11 @@ func DefaultAPIClientConfig() *APIClientConfig {
 	c := APIClientConfig{
 		PathPrefix:     DefaultPathPrefix,
 		IssuerProvider: defaultIssuerProvider(),
-		RealmProvider:  ContextRealmProvider(),
-		TokenProvider:  ContextTokenProvider(),
-		TokenParser:    NewX509TokenParser(0),
 		HTTPClient:     cleanhttp.DefaultClient(),
 		Logger:         DefaultZerologLogger(),
 		Debug:          new(DebugConfig),
 	}
 	return &c
-}
-
-// DefaultAPIClientConfigWithRealm returns a new config with all defaults except that the RealmProvider is replaced with
-// a StaticRealmProvider
-func DefaultAPIClientConfigWithRealm(realm string) *APIClientConfig {
-	c := DefaultAPIClientConfig()
-	c.RealmProvider = NewStaticRealmProvider(realm)
-	return c
 }
 
 // APIClient
@@ -185,10 +146,6 @@ type APIClient struct {
 	pathPrefix string
 
 	mr requestMutatorRunner
-
-	realmProvider RealmProvider
-	tokenProvider TokenProvider
-	tokenParser   TokenParser
 
 	hc *http.Client
 }
@@ -203,7 +160,7 @@ func NewAPIClient(config *APIClientConfig, mutators ...ConfigMutator) (*APIClien
 	)
 
 	// try to ensure we have a sane-ish config
-	cc = compileConfig(config, mutators...)
+	cc = compileBaseConfig(config, mutators...)
 
 	// attempt to set issuer address
 	if cl.issAddr, err = cc.IssuerProvider.IssuerAddress(); err != nil {
@@ -215,11 +172,6 @@ func NewAPIClient(config *APIClientConfig, mutators ...ConfigMutator) (*APIClien
 
 	// set http client
 	cl.hc = cc.HTTPClient
-
-	// set providers
-	cl.realmProvider = cc.RealmProvider
-	cl.tokenProvider = cc.TokenProvider
-	cl.tokenParser = cc.TokenParser
 
 	// set logger and debug mode
 	cl.log = cc.Logger
@@ -247,140 +199,205 @@ func (c *APIClient) IssuerAddress() string {
 	return c.issAddr
 }
 
-// RealmProvider will return the RealmProvider defined at client construction
-func (c *APIClient) RealmProvider() RealmProvider {
-	return c.realmProvider
-}
-
-// TokenProvider will return the TokenProvider defined at client construction
-func (c *APIClient) TokenProvider() TokenProvider {
-	return c.tokenProvider
-}
-
-// TokenParser will return the token parser defined at client construction
-func (c *APIClient) TokenParser() TokenParser {
-	return c.tokenParser
-}
-
-// AuthService contains modeled api calls for auth API requests
-func (c *APIClient) AuthService() *AuthService {
-	return NewAuthService(c)
-}
-
-// AdminService contains modeled api calls for admin API requests
-func (c *APIClient) AdminService() *AdminService {
-	return NewAdminService(c)
-}
-
-// RequestAccessToken attempts to extract the encoded bearer token from the provided request and parse it into a modeled
-// access token type
-func (c *APIClient) RequestAccessToken(ctx context.Context, request *http.Request, claimsType jwt.Claims) (*jwt.Token, error) {
-	if bt, ok := RequestBearerToken(request); ok {
-		return c.AuthService().ParseToken(ctx, bt, claimsType)
-	}
-	return nil, errors.New("bearer token not found in request")
-}
-
-// Call will attempt to execute an arbitrary request against the issuer provided at client creation
-//
-// All API requests flow through this method.
-//
-// It does the following in this order:
-//	1. Compiles full URL against client issuer with provided request path
-//	2. Constructs *http.Request from provided variables
-//	3. Executes, in order, any and all provided RequestMutators
-// 	4. Executes request using internal *http.APIClient instance
-//
-//	Parameters:
-//		- ctx:			This must be provided by you.  This call only directly optionally requires token values
-//		- method: 		This must be an HTTP request method (GET, POST, PUT, etc.)
-//		- requestPath: 	This must be the API request path relative to the root of the IssuerHostname provided at client construction (i.e. "/auth/admin/realms/customer/groups/")
-//		- body:			This must either be nil, an io.Reader implementation, or a json-serializable type that will be set as the body of the constructed *http.Request
-//		- mutators:		This may be zero or more funcs adhering to the RequestMutator type.  These funcs will be executed in order provided.
-//
-// 	Response:
-//		- *http.Response:	The raw HTTP response seen.  Body will NOT have been read by this point.
-//		- error:		Any error seen during the execution of this func.
-func (c *APIClient) Call(ctx context.Context, method, requestPath string, body interface{}, mutators ...RequestMutator) (*http.Response, error) {
+// RealmIssuerConfiguration returns metadata about the keycloak realm instance being connected to, such as the public
+// key for token signing.
+func (c *APIClient) RealmIssuerConfiguration(ctx context.Context, name string, mutators ...RequestMutator) (RealmIssuerConfiguration, error) {
 	var (
-		requestURL string
-		req        *Request
-		httpReq    *http.Request
-		err        error
+		resp *http.Response
+		ic   *RealmIssuerConfiguration
+		err  error
+	)
+	resp, err = c.Call(ctx, http.MethodGet, c.realmsPath(name), nil, mutators...)
+	ic = new(RealmIssuerConfiguration)
+	if err = handleResponse(resp, http.StatusOK, &ic, err); err != nil {
+		return *ic, err
+	}
+	return *ic, nil
+}
+
+func (c *APIClient) Do(ctx context.Context, req *APIRequest, mutators ...RequestMutator) (*http.Response, error) {
+	var (
+		httpRequest  *http.Request
+		httpResponse *http.Response
+		err          error
 	)
 
-	// build url
-	requestURL = fmt.Sprintf("%s%s", c.issAddr, strings.TrimLeft(requestPath, "/"))
+	// apply any mutators
+	if i, err := c.mr(req, mutators...); err != nil {
+		return nil, fmt.Errorf("mutator %d returned error: %w", i, err)
+	}
+
+	// construct http request
+	if httpRequest, err = req.ToHTTP(ctx, c.issAddr); err != nil {
+		return nil, err
+	}
+
+	c.log.Debug().
+		Str("request-method", httpRequest.Method).
+		Str("request-url", httpRequest.URL.String()).
+		Str("request-body-type", req.BodyType()).
+		Int("request-mutators", len(mutators)).
+		Msg("Preparing to execute new request...")
+
+	// execute
+	httpResponse, err = c.hc.Do(httpRequest)
+	return httpResponse, err
+}
+
+// Call is a helper method that
+func (c *APIClient) Call(ctx context.Context, method, requestPath string, body interface{}, mutators ...RequestMutator) (*http.Response, error) {
+	var (
+		req *APIRequest
+		err error
+	)
 
 	// ensure we've got an actual slice here
 	if mutators == nil {
 		mutators = make([]RequestMutator, 0)
 	}
 
-	// if this request has a bearer token associated with it,
-	if token, ok := contextStringValue(ctx, ContextKeyToken); ok {
-		mutators = append(mutators, bearerTokenMutator(token))
-	}
-
-	// test context sanity before we even do the rest of this stuff.
-	if err = ctx.Err(); err != nil {
+	req = NewAPIRequest(method, requestPath)
+	if err = req.SetBody(body); err != nil {
 		return nil, err
 	}
 
-	// build request
-	req, err = buildRequest(ctx, method, requestURL, body, c.mr, mutators...)
-	if err != nil {
-		return nil, httpRequestBuildErr(requestPath, err)
-	}
-
-	httpReq = req.build()
-
-	c.log.Debug().
-		Str("request-method", method).
-		Str("request-url", httpReq.URL.String()).
-		Str("request-body-type", fmt.Sprintf("%T", body)).
-		Int("request-mutators", len(mutators)).
-		Msg("Preparing to execute new request...")
-
-	return c.hc.Do(httpReq)
+	return c.Do(ctx, req, mutators...)
 }
 
-// CallRequireOK is a convenience method that will return an error if the seen response code was anything other than
-// 200 OK.  If the response was OK and the "model" parameter was defined, it will attempt to json.Unmarshal the response
-// body into this model.
-func (c *APIClient) CallRequireOK(ctx context.Context, method, requestPath string, body interface{}, mutators ...RequestMutator) (*http.Response, error) {
+// basePath builds a request path under the configured prefix... path
+func (c *APIClient) basePath(bits ...string) string {
+	if len(bits) == 0 {
+		return c.pathPrefix
+	}
+	return fmt.Sprintf(apiPathFormat, c.pathPrefix, path.Join(bits...))
+}
+
+// realmsPath builds a request path under the /realms/{realm}/... path
+func (c *APIClient) realmsPath(realm string, bits ...string) string {
+	return fmt.Sprintf(kcURLPathRealmsFormat, c.pathPrefix, realm, path.Join(bits...))
+}
+
+// adminRealmsPath builds a request path under the /admin/realms/{realm}/... path
+func (c *APIClient) adminRealmsPath(realm string, bits ...string) (string, error) {
+	return fmt.Sprintf(kcURLPathAdminRealmsFormat, c.pathPrefix, realm, path.Join(bits...)), nil
+}
+
+type RealmAPIClientConfig struct {
+	// RealmProvider [optional]
+	//
+	// The RealmProvider will be called on a per-request basis, depending on if that request needs to have the realm
+	// injected into the context.
+	//
+	// This is used in a few key ways:
+	// -  Public Key retrieval and caching
+	// -  URL construction (i.e. /auth/realms/{realm}/.well-known/openid-configuration)
+	// -  Token validation
+	//
+	// The above is not a comprehensive list, but generally speaking the overwhelming majority of requests require the
+	// realm value to defined.
+	//
+	// See "provider_realm.go" for implementation details.  If you construct a config using DefaultAPIClientConfig(),
+	// you will be expected to provide a context with the realm already defined with each request
+	RealmProvider RealmConfigurationProvider
+
+	// TokenProvider [optional]
+	//
+	// The TokenProvider will be called on a per-request basis, as it is needed.  Not all requests require a bearer
+	// token.  For example, the OpenID Configuration and Realm Issuer Configuration endpoints are open and simply
+	// require a Realm value.
+	//
+	// As a general rule, however, all  "admin" endpoints (i.e. /auth/admin/realms/{realm}/users) will require
+	// a token.
+	//
+	// See "token_provider.go" for implementation details.  If you construct a config using DefaultAPIClientConfig(),
+	// you will be expected to provide a context with a token already defined with each request
+	TokenProvider TokenProvider
+
+	// TokenParser [optional]
+	//
+	// The TokenParser will be called any time the client needs a realm's public key.  This is primarily used to
+	// validate access and bearer tokens
+	TokenParser TokenParser
+}
+
+type RealmAPIClient struct {
+	*APIClient
+
+	tokenProvider TokenProvider
+	tokenParser   TokenParser
+
+	realmName string
+}
+
+func (c *APIClient) RealmAPIClient(ctx context.Context, conf *RealmAPIClientConfig, mutators ...RequestMutator) (*RealmAPIClient, error) {
 	var (
-		resp *http.Response
-		err  error
+		ok  bool
+		err error
+
+		rc = new(RealmAPIClient)
 	)
 
-	// execute request and determine if we have an error
-	if resp, err = c.Call(ctx, method, requestPath, body, mutators...); err != nil {
-		return resp, fmt.Errorf("error executing request %q: %w", requestPath, err)
+	if conf == nil {
+		return nil, errors.New("config cannot be nil")
+	}
+	if conf.RealmProvider == nil {
+		return nil, errors.New("realm provide cannot be nil")
+	}
+	if conf.TokenProvider == nil {
+		return nil, errors.New("token provide cannot be nil")
+	}
+	if conf.TokenParser == nil {
+		return nil, errors.New("token parser cannot be nil")
 	}
 
-	// test for 200
-	if resp.StatusCode != http.StatusOK {
-		return resp, fmt.Errorf("received non-200 from request \"%s %s\": %d (%s)", method, requestPath, resp.StatusCode, http.StatusText(resp.StatusCode))
+	rc.APIClient = c
+
+	if rc.realmName, err = conf.RealmProvider.RealmConfiguration(); err != nil {
+		return nil, fmt.Errorf("error fetching realm name: %w", err)
 	}
 
-	return resp, nil
+	rc.tokenProvider = conf.TokenProvider
+	rc.tokenParser = conf.TokenParser
+
+	return rc, nil
 }
 
-func (c *APIClient) RequireRealm(ctx context.Context) (context.Context, error) {
-	return c.RealmProvider().SetRealmValue(ctx)
+// RealmName returns the realm this client instance is scoped to
+func (rc *RealmAPIClient) RealmName() string {
+	return rc.realmName
 }
 
-func (c *APIClient) RequireToken(ctx context.Context) (context.Context, error) {
-	return c.TokenProvider().SetTokenValue(ctx, c)
+// TokenProvider will return the TokenProvider defined at client construction
+func (rc *RealmAPIClient) TokenProvider() TokenProvider {
+	return rc.tokenProvider
 }
 
-func (c *APIClient) RequireAllContextValues(ctx context.Context) (context.Context, error) {
-	if ctx, err := c.RequireRealm(ctx); err != nil {
-		return nil, err
-	} else if ctx, err = c.RequireToken(ctx); err != nil {
-		return nil, err
-	} else {
-		return ctx, nil
+// TokenParser will return the token parser defined at client construction
+func (rc *RealmAPIClient) TokenParser() TokenParser {
+	return rc.tokenParser
+}
+
+// RealmIssuerConfiguration will either return the current cached version of this client's realm config or attempt to
+// refresh it should no cache version be found.
+func (rc *RealmAPIClient) RealmIssuerConfiguration(ctx context.Context, mutators ...RequestMutator) (RealmIssuerConfiguration, error) {
+	var (
+		realmConfig RealmIssuerConfiguration
+		ok          bool
+		err         error
+	)
+
+	return realmConfig, nil
+}
+
+func (rc *RealmAPIClient) TokenServiceURL(ctx context.Context, mutators ...RequestMutator) (string, error) {
+
+}
+
+// RequestAccessToken attempts to extract the encoded bearer token from the provided request and parse it into a modeled
+// access token type
+func (rc *RealmAPIClient) RequestAccessToken(ctx context.Context, request *http.Request, claimsType jwt.Claims) (*jwt.Token, error) {
+	if bt, ok := RequestBearerToken(request); ok {
+		return rc.ParseToken(ctx, bt, claimsType)
 	}
+	return nil, errors.New("bearer token not found in request")
 }
