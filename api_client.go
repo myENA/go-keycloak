@@ -675,6 +675,70 @@ func (rc *RealmAPIClient) OpenIDConnectToken(ctx context.Context, tp TokenProvid
 	return token, nil
 }
 
+func (b *baseService) IntrospectRequestingPartyToken(ctx context.Context, rawRPT string) (*TokenIntrospectionResults, error) {
+	var (
+		requestPath string
+		body        url.Values
+		resp        *http.Response
+		results     *TokenIntrospectionResults
+		err         error
+	)
+	if ctx, err = b.c.RequireRealm(ctx); err != nil {
+		return nil, err
+	}
+	if requestPath, err = b.realmsPath(ctx, oidcTokenIntrospectBits...); err != nil {
+		return nil, err
+	}
+	body = make(url.Values)
+	body.Add(paramTokenTypeHint, TokenTypeHintRequestingPartyToken)
+	body.Add(paramTypeToken, rawRPT)
+	resp, err = b.c.Call(
+		ctx,
+		http.MethodPost,
+		requestPath,
+		strings.NewReader(body.Encode()),
+		HeaderMutator(httpHeaderContentType, httpHeaderValueFormURLEncoded, true))
+	results = new(TokenIntrospectionResults)
+	if err = handleResponse(resp, http.StatusOK, results, err); err != nil {
+		return nil, err
+	}
+	return results, nil
+}
+
+// ClientEntitlement will attempt to call the pre-uma2 entitlement endpoint to return a Requesting Party Token
+// containing details about what aspects of the provided clientID the token for this request has access to, if any.
+// DEPRECATED: use the newer introspection workflow for  instances newer than 3.4
+func (b *baseService) ClientEntitlement(ctx context.Context, clientID string, claimsType jwt.Claims) (*jwt.Token, error) {
+	var (
+		resp *http.Response
+		err  error
+
+		rptResp = new(struct {
+			RPT string `json:"rpt"`
+		})
+	)
+
+	// construct context fully, including token, realm, and issuer address
+	if ctx, err = b.c.RequireAllContextValues(ctx); err != nil {
+		return nil, err
+	}
+	ctx = IssuerAddressContext(ctx, b.c.IssuerAddress())
+
+	// compile request path manually based on above context
+	requestPath, err := b.realmsPath(ctx, path.Join(kcPathPrefixEntitlement, clientID))
+	if err != nil {
+		return nil, err
+	}
+
+	// execute request.
+	resp, err = b.c.Call(ctx, http.MethodGet, requestPath, nil)
+	if err = handleResponse(resp, http.StatusOK, rptResp, err); err != nil {
+		return nil, err
+	}
+
+	return b.ParseToken(ctx, rptResp.RPT, claimsType)
+}
+
 // RequestAccessToken attempts to extract the encoded bearer token from the provided request and parse it into a modeled
 // access token type
 func (rc *RealmAPIClient) RequestAccessToken(ctx context.Context, request *http.Request, claimsType jwt.Claims) (*jwt.Token, error) {

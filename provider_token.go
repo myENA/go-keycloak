@@ -150,12 +150,12 @@ func (tp *ConfidentialClientTokenProvider) doRefresh(ctx context.Context, client
 	req.ClientSecret = tp.clientSecret
 
 	// fetch new oidc token
-	if oidc, err = client.OpenIDConnectToken(ctx).AuthService().OpenIDConnectToken(ctx, req); err != nil {
+	if oidc, err = client.OpenIDConnectToken(ctx, nil, req); err != nil {
 		return "", fmt.Errorf("unable to fetch OpenIDConnectToken: %w", err)
 	}
 
 	// try to refresh access token.  this has the side-effect of also validating our new token
-	if _, err = client.AuthService().ParseToken(ctx, oidc.AccessToken, nil); err != nil {
+	if _, err = client.ParseToken(ctx, oidc.AccessToken, nil); err != nil {
 		return "", fmt.Errorf("unable to refresh access token: %w", err)
 	}
 
