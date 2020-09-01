@@ -7,7 +7,6 @@ import (
 	"testing"
 	"time"
 
-	keycloak2 "github.com/myENA/go-keycloak"
 	"github.com/myENA/go-keycloak/v2"
 )
 
