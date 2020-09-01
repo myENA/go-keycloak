@@ -10,65 +10,6 @@ import (
 	"github.com/rs/zerolog"
 )
 
-// RealmConfigurationProvider
-//
-// This interface describes any implementation that can provide a realm name to the given context
-type RealmConfigurationProvider interface {
-	// RealmConfiguration must return either the data from /auth/realms/{realm} or an error
-	RealmConfiguration(ctx context.Context, client *APIClient, realm string) (RealmIssuerConfiguration, error)
-
-	// OpenIDConfiguration must return either the data from /auth/realms/{realm}/.well-known/openid-configuration or an
-	// error
-	OpenIDConfiguration(ctx context.Context, client *APIClient, realm string) (*OpenIDConfiguration, error)
-
-	// UMA2Configuration must, if the Keycloak instance is new enough, return either the data from
-	// /auth/realms/{realm}/.well-known/uma2-configuration or an error
-	UMA2Configuration(ctx context.Context, client *APIClient, realm string) (*UMA2Configuration, error)
-}
-
-// GlobalRealmConfigurationProvider will utilize the global config cache to handle realm configuration re-use.
-type GlobalRealmConfigurationProvider struct {
-	mu       sync.Mutex
-	mutators []RequestMutator
-}
-
-func NewGlobalRealmConfigProvider(mutators ...RequestMutator) *GlobalRealmConfigurationProvider {
-	rp := new(GlobalRealmConfigurationProvider)
-	if mutators == nil {
-		mutators = make([]RequestMutator, 0, 0)
-	}
-	rp.mutators = mutators
-	return rp
-}
-
-// SetRealmValue will attempt to locate a pre-existing realm key on the provided context, returning the original
-// context if one is found.  If not, it will return a new context with its own realm value defined.
-func (rp *GlobalRealmConfigurationProvider) RealmConfiguration(ctx context.Context, client *APIClient, realm string) (RealmIssuerConfiguration, error) {
-	var (
-		realmConfig RealmIssuerConfiguration
-		ok          bool
-		err         error
-
-		cache = globalRealmConfigCacheInst()
-	)
-
-	// todo: this is to prevent possibly tons of hits from all attempting to refresh the cache at once, but may not
-	// be necessary...
-	rp.mu.Lock()
-	defer rp.mu.Unlock()
-
-	// first, check if we have cached version of realm config
-	if realmConfig, ok = cache.LoadConfig(client.IssuerAddress(), realm); !ok {
-		// failing that, try to fetch and update cache
-		if realmConfig, err = client.RealmIssuerConfiguration(ctx, realm, rp.mutators...); err != nil {
-			return realmConfig, fmt.Errorf("error fetching realm issuer configuration: %w", err)
-		}
-		cache.StoreConfig(client.IssuerAddress(), realm, realmConfig)
-	}
-
-	return realmConfig, nil
-}
-
 // RealmConfigCache
 //
 // This type is used to store and retrieve processed realm configuration on a per-issuer basis, allowing for more

@@ -33,40 +33,6 @@ func NewAuthService(client *APIClient) *AuthService {
 	return as
 }
 
-// OpenIDConfiguration returns OpenID Configuration metadata about a realm in the  instance being connected
-// to.  This endpoint exists across both 3.4 and newer versions of .
-func (b *baseService) OpenIDConfiguration(ctx context.Context) (*OpenIDConfiguration, error) {
-	var (
-		resp *http.Response
-		oidc *OpenIDConfiguration
-		err  error
-	)
-	ctx = context.WithValue(ctx, ContextKeyToken, nil)
-	resp, err = b.c.Call(ctx, http.MethodGet, b.realmsPath(kcPathOIDC), nil)
-	oidc = new(OpenIDConfiguration)
-	if err = handleResponse(resp, http.StatusOK, oidc, err); err != nil {
-		return nil, err
-	}
-	return oidc, nil
-}
-
-// UMA2Configuration returns UMA2 configuration metadata about a realm in the  instance being connected to.
-// This endpoint only exists in versions of  newer than 4
-func (b *baseService) UMA2Configuration(ctx context.Context) (*UMA2Configuration, error) {
-	var (
-		resp  *http.Response
-		uma2c *UMA2Configuration
-		err   error
-	)
-	ctx = context.WithValue(ctx, ContextKeyToken, nil)
-	resp, err = b.c.Call(ctx, http.MethodGet, b.realmsPath(kcPathUMA2C), nil)
-	uma2c = new(UMA2Configuration)
-	if err = handleResponse(resp, http.StatusOK, uma2c, err); err != nil {
-		return nil, err
-	}
-	return uma2c, err
-}
-
 // OpenIDConnectToken is the starting point for all authorization requests
 func (b *baseService) OpenIDConnectToken(ctx context.Context, req *OpenIDConnectTokenRequest) (*OpenIDConnectToken, error) {
 	var (

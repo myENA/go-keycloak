@@ -108,15 +108,17 @@ type OpenIDConfiguration struct {
 	Issuer                                     string   `json:"issuer"`
 	AuthorizationEndpoint                      string   `json:"authorization_endpoint"`
 	TokenEndpoint                              string   `json:"token_endpoint"`
-	TokenIntrospectionEndpoint                 string   `json:"token_introspection_endpoint"`
-	UserinfoEndpoint                           string   `json:"userinfo_endpoint"`
+	IntrospectionEndpoint                      string   `json:"introspection_endpoint"`
+	UserInfoEndpoint                           string   `json:"userinfo_endpoint"`
 	EndSessionEndpoint                         string   `json:"end_session_endpoint"`
-	JwksURI                                    string   `json:"jwks_uri"`
+	JSONWebKeysEndpoint                        string   `json:"jwks_uri"`
 	CheckSessionIframe                         string   `json:"check_session_iframe"`
 	GrantTypesSupported                        []string `json:"grant_types_supported"`
 	ResponseTypesSupported                     []string `json:"response_types_supported"`
 	SubjectTypesSupported                      []string `json:"subject_types_supported"`
 	IDTokenSigningAlgValuesSupported           []string `json:"id_token_signing_alg_values_supported"`
+	IDTokenEncryptionAlgValuesSupported        []string `json:"id_token_encryption_alg_values_supported"`
+	IDTokenEncryptionEncValuesSupported        []string `json:"id_token_encryption_enc_values_supported"`
 	UserinfoSigningAlgValuesSupported          []string `json:"userinfo_signing_alg_values_supported"`
 	RequestObjectSigningAlgValuesSupported     []string `json:"request_object_signing_alg_values_supported"`
 	ResponseModesSupported                     []string `json:"response_modes_supported"`
@@ -129,6 +131,8 @@ type OpenIDConfiguration struct {
 	ScopesSupported                            []string `json:"scopes_supported"`
 	RequestParameterSupported                  bool     `json:"request_parameter_supported"`
 	RequestURIParameterSupported               bool     `json:"request_uri_parameter_supported"`
+	CodeChallengeMethodsSupported              []string `json:"code_challenge_methods_supported"`
+	TLSClientCertificateBoundAccessToken       bool     `json:"tls_client_certificate_bound_access_token"`
 }
 
 type UMA2Configuration struct {

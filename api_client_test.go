@@ -53,8 +53,8 @@ func newClient(t *testing.T, mutators ...keycloak.ConfigMutator) *keycloak.APICl
 	}
 
 	if kcRealm != "" {
-		rp = keycloak.NewGlobalRealmConfigProvider(kcRealm)
-		t.Logf("Using GlobalRealmConfigurationProvider with realm %q", kcRealm)
+		rp = keycloak.NewSimpleRealmConfigProvider(kcRealm)
+		t.Logf("Using SimpleRealmConfigurationProvider with realm %q", kcRealm)
 	}
 
 	if bt != "" {

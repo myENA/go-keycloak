@@ -33,7 +33,8 @@ const (
 var apiRequestID uint64
 
 type APIRequest struct {
-	id     uint64
+	id uint64
+
 	method string
 	uri    string
 

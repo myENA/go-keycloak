@@ -230,3 +230,12 @@ func handleResponse(httpResp *http.Response, successCode int, modelPtr interface
 
 	return finalErr
 }
+
+func copyStrs(src []string) []string {
+	var dst []string
+	if l := len(src); l > 0 {
+		dst = make([]string, l, l)
+		copy(dst, src)
+	}
+	return dst
+}

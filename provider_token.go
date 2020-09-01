@@ -150,7 +150,7 @@ func (tp *ConfidentialClientTokenProvider) doRefresh(ctx context.Context, client
 	req.ClientSecret = tp.clientSecret
 
 	// fetch new oidc token
-	if oidc, err = client.AuthService().OpenIDConnectToken(ctx, req); err != nil {
+	if oidc, err = client.OpenIDConnectToken(ctx).AuthService().OpenIDConnectToken(ctx, req); err != nil {
 		return "", fmt.Errorf("unable to fetch OpenIDConnectToken: %w", err)
 	}
 

@@ -124,7 +124,7 @@ func ValuedHeaderMutator(k string, v interface{}, override bool) RequestMutator 
 	return nil
 }
 
-func bearerTokenMutator(rawToken string) RequestMutator {
+func BearerTokenMutator(rawToken string) RequestMutator {
 	return func(r *APIRequest) error {
 		if rawToken != "" {
 			r.SetHeader(httpHeaderAuthorization, fmt.Sprintf(httpHeaderAuthValueFormat, rawToken))

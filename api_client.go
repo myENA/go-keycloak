@@ -5,10 +5,13 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"path"
+	"strings"
 	"time"
 
 	"github.com/dgrijalva/jwt-go"
+	"github.com/google/go-querystring/query"
 	"github.com/hashicorp/go-cleanhttp"
 	"github.com/rs/zerolog"
 )
@@ -101,22 +104,6 @@ type APIClientConfig struct {
 	// See "provider_issuer.go" for available providers.
 	IssuerProvider IssuerProvider
 
-	// RealmConfigProvider [optional]
-	//
-	// The RealmConfigProvider will be called on a per-request basis, depending on if that request needs to have the realm
-	// injected into the context.
-	//
-	// This is used in a few key ways:
-	// -  Public Key retrieval and caching
-	// -  URL construction (i.e. /auth/realms/{realm}/.well-known/openid-configuration)
-	// -  Token validation
-	//
-	// The above is not a comprehensive list, but generally speaking the overwhelming majority of requests require the
-	// realm value to defined.
-	//
-	// See "provider_realm_config.go" for implementation details.
-	RealmConfigProvider RealmConfigurationProvider
-
 	// PathPrefix [optional]
 	//
 	// URL Path prefix.  Defaults to value of DefaultPathPrefix.
@@ -143,12 +130,11 @@ type APIClientConfig struct {
 // expected to be manually defined in the context provided to each request.
 func DefaultAPIClientConfig() *APIClientConfig {
 	c := APIClientConfig{
-		PathPrefix:          DefaultPathPrefix,
-		IssuerProvider:      defaultIssuerProvider(),
-		RealmConfigProvider: NewGlobalRealmConfigProvider(),
-		HTTPClient:          cleanhttp.DefaultClient(),
-		Logger:              DefaultZerologLogger(),
-		Debug:               new(DebugConfig),
+		PathPrefix:     DefaultPathPrefix,
+		IssuerProvider: defaultIssuerProvider(),
+		HTTPClient:     cleanhttp.DefaultClient(),
+		Logger:         DefaultZerologLogger(),
+		Debug:          new(DebugConfig),
 	}
 	return &c
 }
@@ -161,8 +147,6 @@ type APIClient struct {
 
 	issAddr    string
 	pathPrefix string
-
-	realmConfigProvider RealmConfigurationProvider
 
 	mr requestMutatorRunner
 
@@ -184,7 +168,6 @@ func NewAPIClient(config *APIClientConfig, mutators ...ConfigMutator) (*APIClien
 		return nil, err
 	}
 
-	cl.realmConfigProvider = cc.RealmConfigProvider
 	cl.pathPrefix = cc.PathPrefix
 	cl.hc = cc.HTTPClient
 	cl.log = cc.Logger
@@ -208,26 +191,6 @@ func (c *APIClient) PathPrefix() string {
 // IssuerAddress will return the address of the issuer this client is targeting
 func (c *APIClient) IssuerAddress() string {
 	return c.issAddr
-}
-
-func (c *APIClient) RealmConfigProvider() RealmConfigurationProvider {
-	return c.realmConfigProvider
-}
-
-// RealmIssuerConfiguration returns metadata about the keycloak realm instance being connected to, such as the public
-// key for token signing.
-func (c *APIClient) RealmIssuerConfiguration(ctx context.Context, name string, mutators ...RequestMutator) (RealmIssuerConfiguration, error) {
-	var (
-		resp *http.Response
-		ic   *RealmIssuerConfiguration
-		err  error
-	)
-	resp, err = c.Call(ctx, http.MethodGet, c.realmsPath(name), nil, mutators...)
-	ic = new(RealmIssuerConfiguration)
-	if err = handleResponse(resp, http.StatusOK, &ic, err); err != nil {
-		return *ic, err
-	}
-	return *ic, nil
 }
 
 func (c *APIClient) Do(ctx context.Context, req *APIRequest, mutators ...RequestMutator) (*http.Response, error) {
@@ -279,6 +242,53 @@ func (c *APIClient) Call(ctx context.Context, method, requestPath string, body i
 	return c.Do(ctx, req, mutators...)
 }
 
+// RealmIssuerConfiguration returns metadata about the keycloak realm instance being connected to, such as the public
+// key for token signing.
+func (c *APIClient) RealmIssuerConfiguration(ctx context.Context, realmName string, mutators ...RequestMutator) (*RealmIssuerConfiguration, error) {
+	var (
+		resp *http.Response
+		ic   *RealmIssuerConfiguration
+		err  error
+	)
+	resp, err = c.Call(ctx, http.MethodGet, c.realmsPath(realmName), nil, mutators...)
+	ic = new(RealmIssuerConfiguration)
+	if err = handleResponse(resp, http.StatusOK, ic, err); err != nil {
+		return nil, err
+	}
+	return ic, nil
+}
+
+// OpenIDConfiguration returns well-known open-id configuration values for the provided realm
+func (c *APIClient) OpenIDConfiguration(ctx context.Context, realmName string, mutators ...RequestMutator) (*OpenIDConfiguration, error) {
+	var (
+		resp *http.Response
+		oidc *OpenIDConfiguration
+		err  error
+	)
+	resp, err = c.Call(ctx, http.MethodGet, c.realmsPath(realmName, kcPathOIDC), nil, mutators...)
+	oidc = new(OpenIDConfiguration)
+	if err = handleResponse(resp, http.StatusOK, oidc, err); err != nil {
+		return nil, err
+	}
+	return oidc, nil
+}
+
+// UMA2Configuration returns well-known uma2 configuration values for the provided realm, assuming you are running
+// keycloak > 3.4
+func (c *APIClient) UMA2Configuration(ctx context.Context, realmName string, mutators ...RequestMutator) (*UMA2Configuration, error) {
+	var (
+		resp *http.Response
+		uma2 *UMA2Configuration
+		err  error
+	)
+	resp, err = c.Call(ctx, http.MethodGet, c.realmsPath(realmName, kcPathUMA2C), nil, mutators...)
+	uma2 = new(UMA2Configuration)
+	if err = handleResponse(resp, http.StatusOK, uma2, err); err != nil {
+		return nil, err
+	}
+	return uma2, nil
+}
+
 // basePath builds a request path under the configured prefix... path
 func (c *APIClient) basePath(bits ...string) string {
 	if len(bits) == 0 {
@@ -297,54 +307,229 @@ func (c *APIClient) adminRealmsPath(realm string, bits ...string) (string, error
 	return fmt.Sprintf(kcURLPathAdminRealmsFormat, c.pathPrefix, realm, path.Join(bits...)), nil
 }
 
-type RealmAPIClientConfig struct {
-	// RealmName [required]
-	//
-	// This is the name of the realm the client will be scoped too
-	RealmName string
+type RealmEnvConfig struct {
+	oidc  *OpenIDConfiguration
+	uma2c *UMA2Configuration
+}
 
-	// TokenProvider [required]
-	//
-	// See "token_provider.go" for implementation details.  If you construct a config using DefaultAPIClientConfig(),
-	// you will be expected to provide a context with a token already defined with each request
-	TokenProvider TokenProvider
+// common configuration entries
 
-	// TokenParser [required]
-	//
-	// The TokenParser will be called any time the client needs a realm's public key.  This is primarily used to
-	// validate access and bearer tokens
-	TokenParser TokenParser
+func (e *RealmEnvConfig) IssuerAddress() string {
+	if e.uma2c != nil {
+		return e.uma2c.Issuer
+	} else {
+		return e.oidc.Issuer
+	}
+}
+
+func (e *RealmEnvConfig) AuthorizationEndpoint() string {
+	if e.uma2c != nil {
+		return e.uma2c.AuthorizationEndpoint
+	} else {
+		return e.oidc.AuthorizationEndpoint
+	}
+}
+
+func (e *RealmEnvConfig) TokenEndpoint() string {
+	if e.uma2c != nil {
+		return e.uma2c.TokenEndpoint
+	} else {
+		return e.oidc.TokenEndpoint
+	}
+}
+
+func (e *RealmEnvConfig) IntrospectionEndpoint() string {
+	if e.uma2c != nil {
+		return e.uma2c.IntrospectionEndpoint
+	} else {
+		return e.oidc.IntrospectionEndpoint
+	}
+}
+
+func (e *RealmEnvConfig) EndSessionEndpoint() string {
+	if e.uma2c != nil {
+		return e.uma2c.EndSessionEndpoint
+	} else {
+		return e.oidc.EndSessionEndpoint
+	}
+}
+
+func (e *RealmEnvConfig) JSONWebKeysEndpoint() string {
+	if e.uma2c != nil {
+		return e.uma2c.JwksURI
+	} else {
+		return e.oidc.JSONWebKeysEndpoint
+	}
+}
+
+func (e *RealmEnvConfig) RegistrationEndpoint() string {
+	if e.uma2c != nil {
+		return e.uma2c.RegistrationEndpoint
+	} else {
+		return e.oidc.RegistrationEndpoint
+	}
+}
+
+func (e *RealmEnvConfig) GrantTypesSupported() []string {
+	if e.uma2c != nil {
+		return copyStrs(e.uma2c.GrantTypesSupported)
+	} else {
+		return copyStrs(e.oidc.GrantTypesSupported)
+	}
+}
+
+func (e *RealmEnvConfig) ResponseTypesSupported() []string {
+	if e.uma2c != nil {
+		return copyStrs(e.uma2c.ResponseTypesSupported)
+	} else {
+		return copyStrs(e.oidc.ResponseTypesSupported)
+	}
+}
+
+func (e *RealmEnvConfig) ResponseModesSupported() []string {
+	if e.uma2c != nil {
+		return copyStrs(e.uma2c.ResponseModesSupported)
+	} else {
+		return copyStrs(e.oidc.ResponseModesSupported)
+	}
+}
+
+func (e *RealmEnvConfig) TokenEndpointAuthMethodsSupported() []string {
+	if e.uma2c != nil {
+		return copyStrs(e.uma2c.TokenEndpointAuthMethodsSupported)
+	} else {
+		return copyStrs(e.oidc.TokenEndpointAuthMethodsSupported)
+	}
+}
+
+func (e *RealmEnvConfig) TokenEndpointAuthSigningAlgValuesSupported() []string {
+	if e.uma2c != nil {
+		return copyStrs(e.uma2c.TokenEndpointAuthSigningAlgValuesSupported)
+	} else {
+		return copyStrs(e.oidc.TokenEndpointAuthSigningAlgValuesSupported)
+	}
+}
+
+func (e *RealmEnvConfig) ScopesSupported() []string {
+	if e.uma2c != nil {
+		return copyStrs(e.uma2c.ScopesSupported)
+	} else {
+		return copyStrs(e.oidc.ScopesSupported)
+	}
+}
+
+// oidc configuration entries
+
+func (e *RealmEnvConfig) UserInfoEndpoint() string {
+	return e.oidc.UserInfoEndpoint
+}
+
+func (e *RealmEnvConfig) CheckSessionIframe() string {
+	return e.oidc.CheckSessionIframe
+}
+
+func (e *RealmEnvConfig) SubjectTypesSupported() []string {
+	return copyStrs(e.oidc.SubjectTypesSupported)
+}
+
+func (e *RealmEnvConfig) IDTokenSigningAlgValuesSupported() []string {
+	return copyStrs(e.oidc.IDTokenSigningAlgValuesSupported)
+}
+
+func (e *RealmEnvConfig) IDTokenEncryptionAlgValuesSupported() []string {
+	return copyStrs(e.oidc.IDTokenEncryptionAlgValuesSupported)
+}
+
+func (e *RealmEnvConfig) IDTokenEncryptionEncValuesSupported() []string {
+	return copyStrs(e.oidc.IDTokenEncryptionEncValuesSupported)
+}
+
+func (e *RealmEnvConfig) UserInfoSigningAlgValuesSupported() []string {
+	return copyStrs(e.oidc.UserinfoSigningAlgValuesSupported)
+}
+
+func (e *RealmEnvConfig) RequestObjectSigningAlgValuesSupported() []string {
+	return copyStrs(e.oidc.RequestObjectSigningAlgValuesSupported)
+}
+
+func (e *RealmEnvConfig) ClaimsSupported() []string {
+	return copyStrs(e.oidc.ClaimsSupported)
+}
+
+func (e *RealmEnvConfig) ClaimTypesSupported() []string {
+	return copyStrs(e.oidc.ClaimTypesSupported)
+}
+
+func (e *RealmEnvConfig) ClaimsParameterSupported() bool {
+	return e.oidc.ClaimsParameterSupported
+}
+
+func (e *RealmEnvConfig) RequestParameterSupported() bool {
+	return e.oidc.RequestParameterSupported
+}
+
+func (e *RealmEnvConfig) RequestURIParameterSupported() bool {
+	return e.oidc.RequestURIParameterSupported
+}
+
+func (e *RealmEnvConfig) CodeChallengeMethodsSupported() []string {
+	return copyStrs(e.oidc.CodeChallengeMethodsSupported)
+}
+
+func (e *RealmEnvConfig) TLSClientCertificateBoundAccessTokens() bool {
+	return e.oidc.TLSClientCertificateBoundAccessToken
+}
+
+// uma2 configuration entries
+
+func (e *RealmEnvConfig) ResourceRegistrationEndpoint() (string, bool) {
+	if e.uma2c != nil {
+		return e.uma2c.ResourceRegistrationEndpoint, true
+	}
+	return "", false
+}
+
+func (e *RealmEnvConfig) PermissionEndpoint() (string, bool) {
+	if e.uma2c != nil {
+		return e.uma2c.PermissionEndpoint, true
+	}
+	return "", false
+}
+
+func (e *RealmEnvConfig) PolicyEndpoint() (string, bool) {
+	if e.uma2c != nil {
+		return e.uma2c.PermissionEndpoint, true
+	}
+	return "", false
 }
 
 type RealmAPIClient struct {
-	*APIClient
-
-	tokenProvider TokenProvider
-	tokenParser   TokenParser
-
+	log       zerolog.Logger
+	client    *APIClient
 	realmName string
+	env       *RealmEnvConfig
 }
 
-func (c *APIClient) RealmAPIClient(ctx context.Context, conf *RealmAPIClientConfig) (*RealmAPIClient, error) {
-	rc := new(RealmAPIClient)
+func (c *APIClient) RealmAPIClient(ctx context.Context, realmName string, mutators ...RequestMutator) (*RealmAPIClient, error) {
+	var (
+		err error
 
-	if conf == nil {
-		return nil, errors.New("config cannot be nil")
-	}
-	if conf.RealmName == "" {
-		return nil, errors.New("realm name cannot be empty")
-	}
-	if conf.TokenProvider == nil {
-		return nil, errors.New("token provide cannot be nil")
-	}
-	if conf.TokenParser == nil {
-		return nil, errors.New("token parser cannot be nil")
-	}
+		rc = new(RealmAPIClient)
+	)
 
-	rc.APIClient = c
-	rc.realmName = conf.RealmName
-	rc.tokenProvider = conf.TokenProvider
-	rc.tokenParser = conf.TokenParser
+	rc.client = c
+	rc.log = rc.client.log.With().Str("keycloak-realm", realmName).Logger()
+	rc.realmName = realmName
+	rc.env = new(RealmEnvConfig)
+
+	// attempt to build env details
+	if rc.env.oidc, err = c.OpenIDConfiguration(ctx, realmName, mutators...); err != nil {
+		return nil, fmt.Errorf("error fetching OpenID configuration: %w", err)
+	}
+	// this is allowed to fail, as uma2 support in keycloak is "new"
+	if rc.env.uma2c, err = c.UMA2Configuration(ctx, realmName, mutators...); err != nil {
+		c.log.Error().Err(err).Msg("Error fetching UMA2 configuration")
+	}
 
 	return rc, nil
 }
@@ -354,52 +539,93 @@ func (rc *RealmAPIClient) RealmName() string {
 	return rc.realmName
 }
 
-// TokenProvider will return the TokenProvider defined at client construction
-func (rc *RealmAPIClient) TokenProvider() TokenProvider {
-	return rc.tokenProvider
+func (rc *RealmAPIClient) Environment() *RealmEnvConfig {
+	return rc.env
 }
 
-// TokenParser will return the token parser defined at client construction
-func (rc *RealmAPIClient) TokenParser() TokenParser {
-	return rc.tokenParser
+func (rc *RealmAPIClient) Call(ctx context.Context, tp TokenProvider, method, requestPath string, body interface{}, mutators ...RequestMutator) (*http.Response, error) {
+	if tp != nil {
+		var (
+			token string
+			err   error
+		)
+		if token, err = tp.BearerToken(ctx, rc); err != nil {
+			return nil, err
+		}
+		if mutators == nil {
+			mutators = make([]RequestMutator, 0)
+		}
+		mutators = append(mutators, BearerTokenMutator(token))
+	}
+	return rc.client.Call(ctx, method, requestPath, body, mutators...)
 }
 
-// RealmIssuerConfiguration will either return the current cached version of this client's realm config or attempt to
-// refresh it should no cache version be found.
-func (rc *RealmAPIClient) RealmIssuerConfiguration(ctx context.Context) (RealmIssuerConfiguration, error) {
-	return rc.RealmConfigProvider().RealmConfiguration(ctx, rc.APIClient, rc.realmName)
+func (rc *RealmAPIClient) RealmIssuerConfiguration(ctx context.Context, mutators ...RequestMutator) (*RealmIssuerConfiguration, error) {
+	return rc.client.RealmIssuerConfiguration(ctx, rc.realmName, mutators...)
 }
 
-func (rc *RealmAPIClient) EncodedPublicKey(ctx context.Context) (string, error) {
-	if conf, err := rc.RealmIssuerConfiguration(ctx); err != nil {
+func (rc *RealmAPIClient) EncodedPublicKey(ctx context.Context, mutators ...RequestMutator) (string, error) {
+	if conf, err := rc.RealmIssuerConfiguration(ctx, mutators...); err != nil {
 		return "", err
 	} else {
 		return conf.PublicKey, nil
 	}
 }
 
-func (rc *RealmAPIClient) TokenServiceURL(ctx context.Context) (string, error) {
-	if conf, err := rc.RealmIssuerConfiguration(ctx); err != nil {
+func (rc *RealmAPIClient) TokenServiceURL(ctx context.Context, mutators ...RequestMutator) (string, error) {
+	if conf, err := rc.RealmIssuerConfiguration(ctx, mutators...); err != nil {
 		return "", err
 	} else {
 		return conf.TokenService, nil
 	}
 }
 
-func (rc *RealmAPIClient) AccountServiceURL(ctx context.Context) (string, error) {
-	if conf, err := rc.RealmIssuerConfiguration(ctx); err != nil {
+func (rc *RealmAPIClient) AccountServiceURL(ctx context.Context, mutators ...RequestMutator) (string, error) {
+	if conf, err := rc.RealmIssuerConfiguration(ctx, mutators...); err != nil {
 		return "", err
 	} else {
 		return conf.AccountService, nil
 	}
 }
 
-func (rc *RealmAPIClient) TokensNotBeforeTime(ctx context.Context) (time.Time, error) {
-	if conf, err := rc.RealmIssuerConfiguration(ctx); err != nil {
+func (rc *RealmAPIClient) TokensNotBeforeTime(ctx context.Context, mutators ...RequestMutator) (time.Time, error) {
+	if conf, err := rc.RealmIssuerConfiguration(ctx, mutators...); err != nil {
 		return time.Time{}, err
 	} else {
 		return time.Unix(int64(conf.TokensNotBefore)*int64(time.Second), 0), nil
 	}
+}
+
+func (rc *RealmAPIClient) OpenIDConfiguration(ctx context.Context, mutators ...RequestMutator) (*OpenIDConfiguration, error) {
+	return rc.client.OpenIDConfiguration(ctx, rc.realmName, mutators...)
+}
+
+func (rc *RealmAPIClient) UMA2Configuration(ctx context.Context, mutators ...RequestMutator) (*UMA2Configuration, error) {
+	return rc.client.UMA2Configuration(ctx, rc.realmName, mutators...)
+}
+
+func (rc *RealmAPIClient) OpenIDConnectToken(ctx context.Context, tp TokenProvider, req *OpenIDConnectTokenRequest, mutators ...RequestMutator) (*OpenIDConnectToken, error) {
+	var (
+		body  url.Values
+		resp  *http.Response
+		token *OpenIDConnectToken
+		err   error
+	)
+	if body, err = query.Values(req); err != nil {
+		return nil, fmt.Errorf("error encoding request: %w", err)
+	}
+	resp, err = rc.Call(
+		ctx,
+		tp,
+		http.MethodPost,
+		rc.env.TokenEndpoint(),
+		strings.NewReader(body.Encode()),
+		HeaderMutator(httpHeaderContentType, httpHeaderValueFormURLEncoded, true))
+	token = new(OpenIDConnectToken)
+	if err = handleResponse(resp, http.StatusOK, token, err); err != nil {
+		return nil, err
+	}
+	return token, nil
 }
 
 // RequestAccessToken attempts to extract the encoded bearer token from the provided request and parse it into a modeled
