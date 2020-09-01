@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"path"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/dgrijalva/jwt-go"
@@ -34,7 +35,8 @@ const (
 	ResponseModePermissions = "permissions"
 
 	// public key cache stuff
-	pkKeyFormat = "%s\n%s"
+	pkKeyPrefix = "pk"
+	pkKeyFormat = pkKeyPrefix + "\n%s\n%s\n%s"
 
 	// common
 	httpHeaderAccept                    = "Accept"
@@ -104,6 +106,12 @@ type APIClientConfig struct {
 	// See "provider_issuer.go" for available providers.
 	IssuerProvider IssuerProvider
 
+	// TokenParsers [required]
+	//
+	// List of token parser implementations to support with this client.  These will be used for all realm clients
+	// created by this client instance
+	TokenParsers []TokenParser
+
 	// PathPrefix [optional]
 	//
 	// URL Path prefix.  Defaults to value of DefaultPathPrefix.
@@ -126,12 +134,11 @@ type APIClientConfig struct {
 	Debug *DebugConfig
 }
 
-// DefaultAPIClientConfig will return a config populated with useful default values where the realm and token are
-// expected to be manually defined in the context provided to each request.
-func DefaultAPIClientConfig() *APIClientConfig {
+func DefaultAPIClientConfig(tokenParsers []TokenParser) *APIClientConfig {
 	c := APIClientConfig{
 		PathPrefix:     DefaultPathPrefix,
 		IssuerProvider: defaultIssuerProvider(),
+		TokenParsers:   tokenParsers,
 		HTTPClient:     cleanhttp.DefaultClient(),
 		Logger:         DefaultZerologLogger(),
 		Debug:          new(DebugConfig),
@@ -147,6 +154,9 @@ type APIClient struct {
 
 	issAddr    string
 	pathPrefix string
+
+	tps   map[string]TokenParser
+	tpsMu sync.RWMutex
 
 	mr requestMutatorRunner
 
@@ -168,7 +178,12 @@ func NewAPIClient(config *APIClientConfig, mutators ...ConfigMutator) (*APIClien
 		return nil, err
 	}
 
+	if len(cc.TokenParsers) == 0 {
+		return nil, errors.New("must provide at least one token parser")
+	}
+
 	cl.pathPrefix = cc.PathPrefix
+	cl.tps = make(map[string]TokenParser)
 	cl.hc = cc.HTTPClient
 	cl.log = cc.Logger
 	cl.mr = buildRequestMutatorRunner(cc.Debug)
@@ -178,8 +193,8 @@ func NewAPIClient(config *APIClientConfig, mutators ...ConfigMutator) (*APIClien
 
 // NewAPIClientWithIssuerAddress is a shortcut constructor that only requires you provide the address of the keycloak
 // instance this client will be executing calls against
-func NewAPIClientWithIssuerAddress(issuerAddress string, mutators ...ConfigMutator) (*APIClient, error) {
-	conf := DefaultAPIClientConfig()
+func NewAPIClientWithIssuerAddress(issuerAddress string, tokenParsers []TokenParser, mutators ...ConfigMutator) (*APIClient, error) {
+	conf := DefaultAPIClientConfig(tokenParsers)
 	conf.IssuerProvider = NewStaticIssuerProvider(issuerAddress)
 	return NewAPIClient(conf, mutators...)
 }
@@ -191,6 +206,23 @@ func (c *APIClient) PathPrefix() string {
 // IssuerAddress will return the address of the issuer this client is targeting
 func (c *APIClient) IssuerAddress() string {
 	return c.issAddr
+}
+
+func (c *APIClient) TokenParser(alg string) (TokenParser, bool) {
+	c.tpsMu.RLock()
+	defer c.tpsMu.RUnlock()
+	tp, ok := c.tps[alg]
+	return tp, ok
+}
+
+func (c *APIClient) RegisterTokenParsers(tps ...TokenParser) {
+	c.tpsMu.Lock()
+	defer c.tpsMu.Unlock()
+	for _, tp := range tps {
+		for _, alg := range tp.SupportedAlgorithms() {
+			c.tps[alg] = tp
+		}
+	}
 }
 
 func (c *APIClient) Do(ctx context.Context, req *APIRequest, mutators ...RequestMutator) (*http.Response, error) {
@@ -604,6 +636,20 @@ func (rc *RealmAPIClient) UMA2Configuration(ctx context.Context, mutators ...Req
 	return rc.client.UMA2Configuration(ctx, rc.realmName, mutators...)
 }
 
+func (rc *RealmAPIClient) JSONWebKeys(ctx context.Context, mutators ...RequestMutator) (*JSONWebKeySet, error) {
+	var (
+		resp *http.Response
+		jwks *JSONWebKeySet
+		err  error
+	)
+	resp, err = rc.Call(ctx, nil, http.MethodGet, rc.env.JSONWebKeysEndpoint(), nil, mutators...)
+	jwks = new(JSONWebKeySet)
+	if err = handleResponse(resp, http.StatusOK, jwks, err); err != nil {
+		return nil, err
+	}
+	return jwks, nil
+}
+
 func (rc *RealmAPIClient) OpenIDConnectToken(ctx context.Context, tp TokenProvider, req *OpenIDConnectTokenRequest, mutators ...RequestMutator) (*OpenIDConnectToken, error) {
 	var (
 		body  url.Values
@@ -620,7 +666,8 @@ func (rc *RealmAPIClient) OpenIDConnectToken(ctx context.Context, tp TokenProvid
 		http.MethodPost,
 		rc.env.TokenEndpoint(),
 		strings.NewReader(body.Encode()),
-		HeaderMutator(httpHeaderContentType, httpHeaderValueFormURLEncoded, true))
+		addMutator(HeaderMutator(httpHeaderContentType, httpHeaderValueFormURLEncoded, true), mutators)...,
+	)
 	token = new(OpenIDConnectToken)
 	if err = handleResponse(resp, http.StatusOK, token, err); err != nil {
 		return nil, err
@@ -655,10 +702,13 @@ func (rc *RealmAPIClient) ParseToken(ctx context.Context, rawToken string, claim
 
 func (rc *RealmAPIClient) keyFunc(ctx context.Context) jwt.Keyfunc {
 	return func(token *jwt.Token) (interface{}, error) {
-		if conf, err := rc.RealmIssuerConfiguration(ctx); err != nil {
-			return nil, err
-		} else {
-			return rc.TokenParser().Parse(conf, token)
+		var (
+			tp TokenParser
+			ok bool
+		)
+		if tp, ok = rc.client.TokenParser(token.Method.Alg()); !ok {
+			return nil, fmt.Errorf("no token parser registered to handle %q", token.Method.Alg())
 		}
+		return tp.Parse(ctx, rc, token)
 	}
 }

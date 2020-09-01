@@ -1,7 +1,6 @@
 package keycloak
 
 import (
-	"context"
 	"crypto/subtle"
 	"encoding/json"
 	"errors"
@@ -14,8 +13,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dcarbone/sclg/v3"
-	"github.com/google/go-cmp/cmp"
 	"github.com/rs/zerolog"
 )
 
@@ -71,26 +68,22 @@ func DefaultZerologLogger() zerolog.Logger {
 		Logger()
 }
 
-// buildRCCacheKey creates the public key cache entry keys.
-func buildRCCacheKey(issuerHost, realm string) string {
-	return fmt.Sprintf(pkKeyFormat, issuerHost, realm)
+// buildPKCacheKey creates the public key cache entry keys.
+func buildPKCacheKey(issuerHost, realm, keyID string) string {
+	return fmt.Sprintf(pkKeyFormat, issuerHost, realm, keyID)
 }
 
-// parseRCCacheKey splits a cache key into issuer : realm
-func parseRCCacheKey(key interface{}) (string, string) {
+// parsePKCacheKey splits a cache key into issuer : realm
+func parsePKCacheKey(key interface{}) (string, string, string) {
 	str, ok := key.(string)
 	if !ok {
-		return "", ""
+		return "", "", ""
 	}
-	s := strings.SplitN("\n", str, 2)
-	if len(s) != 2 {
-		return "", ""
+	s := strings.SplitN("\n", str, 4)
+	if len(s) != 4 || s[0] != pkKeyPrefix {
+		return "", "", ""
 	}
-	return s[0], s[1]
-}
-
-func httpRequestBuildErr(requestPath string, err error) error {
-	return fmt.Errorf("error building *http.Evaluate against %q: %w", requestPath, err)
+	return s[1], s[2], s[3]
 }
 
 func parseResponseLocations(resp *http.Response) ([]string, error) {
@@ -110,15 +103,6 @@ func parseAndReturnLocations(resp *http.Response) ([]string, error) {
 		return nil, err
 	}
 	return locations, nil
-}
-
-func contextStringValue(ctx context.Context, key string) (string, bool) {
-	if v := ctx.Value(key); v != nil {
-		if s, ok := v.(string); ok && s != "" {
-			return s, true
-		}
-	}
-	return "", false
 }
 
 func compileBaseConfig(provided *APIClientConfig, mutators ...ConfigMutator) *APIClientConfig {
@@ -141,11 +125,6 @@ func compileBaseConfig(provided *APIClientConfig, mutators ...ConfigMutator) *AP
 		actual.IssuerProvider = provided.IssuerProvider
 	}
 
-	// config cache
-	if provided.RealmConfigProvider != nil {
-		actual.RealmConfigProvider = provided.RealmConfigProvider
-	}
-
 	// url paths
 	if provided.PathPrefix != "" {
 		actual.PathPrefix = provided.PathPrefix
@@ -163,16 +142,6 @@ func compileBaseConfig(provided *APIClientConfig, mutators ...ConfigMutator) *AP
 	actual.Debug = provided.Debug
 
 	return actual
-}
-
-func rcCacheEquivalencyTest(_, current, new interface{}) bool {
-	return cmp.Equal(current, new)
-}
-
-func rcCacheEventCallback(rcc *TimedRealmConfigCache) sclg.TimedCacheEventCallback {
-	return func(ev sclg.TimedCacheEvent, _ interface{}, message string) {
-		rcc.log.Debug().Str("event", ev.String()).Str("event-message", message).Msg("Event seen")
-	}
 }
 
 func verifyAudience(auds []string, cmp string, required bool) bool {
@@ -238,4 +207,11 @@ func copyStrs(src []string) []string {
 		copy(dst, src)
 	}
 	return dst
+}
+
+func addMutator(m RequestMutator, dst []RequestMutator) []RequestMutator {
+	if dst == nil {
+		dst = make([]RequestMutator, 0)
+	}
+	return append(dst, m)
 }

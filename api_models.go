@@ -781,3 +781,27 @@ func (m MapClaims) VerifyAudience(cmp string, req bool) bool {
 	}
 	return false
 }
+
+type JSONWebKey struct {
+	KeyID                string   `json:"kid"`
+	KeyAlgorithm         string   `json:"alg"`
+	KeyType              string   `json:"kty"`
+	KeyUsage             string   `json:"use"`
+	Modulus              string   `json:"n"`
+	Exponent             string   `json:"e"`
+	X509CertificateChain []string `json:"x5c"`
+	X509Thumbprint       string   `json:"x5t"`
+}
+
+type JSONWebKeySet struct {
+	Keys []*JSONWebKey `json:"keys"`
+}
+
+func (jwk *JSONWebKeySet) KeychainByID(keyID string) *JSONWebKey {
+	for _, key := range jwk.Keys {
+		if key.KeyID == keyID {
+			return key
+		}
+	}
+	return nil
+}
