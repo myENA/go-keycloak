@@ -900,3 +900,14 @@ func (tc *tokenAPIClient) OpenIDConnectToken(ctx context.Context, req *OpenIDCon
 	}
 	return token, nil
 }
+
+// RequestingPartyToken is a convenience method that attempts to first retrieve an RPT via UMA2 and falling back to
+// legacy Keycloak Entitlement api if uma2 support not detected.
+func (tc *tokenAPIClient) RequestingPartyToken(ctx context.Context, aud string, claimsType jwt.Claims, mutators ...RequestMutator) (*jwt.Token, error) {
+	if tc.Environment().SupportsUMA2() {
+		req := NewOpenIDConnectTokenRequest(GrantTypeUMA2Ticket)
+		req.Audience = aud
+		return tc.PermissionsService().RequestingPartyToken(ctx, req, claimsType, mutators...)
+	}
+	return tc.ClientEntitlement(ctx, aud, claimsType, mutators...)
+}

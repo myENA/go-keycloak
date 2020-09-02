@@ -7,14 +7,15 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/dgrijalva/jwt-go"
 	"github.com/google/go-querystring/query"
 )
 
 type PermissionsService struct {
-	tc *TokenAPIClient
+	tc *tokenAPIClient
 }
 
-func (tc *TokenAPIClient) PermissionsService() *PermissionsService {
+func (tc *tokenAPIClient) PermissionsService() *PermissionsService {
 	ps := new(PermissionsService)
 	ps.tc = tc
 	return ps
@@ -32,7 +33,7 @@ func (ps *PermissionsService) Evaluate(ctx context.Context, req *OpenIDConnectTo
 		return nil, fmt.Errorf("error encoding request: %w", err)
 	}
 	body.Set(paramResponseMode, ResponseModePermissions)
-	resp, err = ps.tc.Call(
+	resp, err = ps.tc.callFn(
 		ctx,
 		http.MethodPost,
 		ps.tc.env.TokenEndpoint(),
@@ -71,4 +72,13 @@ func (ps *PermissionsService) Decide(ctx context.Context, req *OpenIDConnectToke
 		return false, err
 	}
 	return decision.Result, nil
+}
+
+// RequestingPartyToken will attempt to automatically decode and validate a RPT returned from an OIDC token request
+func (ps *PermissionsService) RequestingPartyToken(ctx context.Context, req *OpenIDConnectTokenRequest, claimsType jwt.Claims, mutators ...RequestMutator) (*jwt.Token, error) {
+	resp, err := ps.tc.OpenIDConnectToken(ctx, req, mutators...)
+	if err != nil {
+		return nil, err
+	}
+	return ps.tc.ParseToken(ctx, resp.AccessToken, claimsType)
 }
