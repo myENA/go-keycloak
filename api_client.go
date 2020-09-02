@@ -354,6 +354,10 @@ type RealmEnvConfig struct {
 
 // common configuration entries
 
+func (e *RealmEnvConfig) SupportsUMA2() bool {
+	return e.uma2c != nil
+}
+
 func (e *RealmEnvConfig) IssuerAddress() string {
 	if e.uma2c != nil {
 		return e.uma2c.Issuer

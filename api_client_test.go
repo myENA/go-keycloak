@@ -254,11 +254,22 @@ func TestRPT(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
-	req := keycloak.NewOpenIDConnectTokenRequest(keycloak.GrantTypeUMA2Ticket)
-	req.Audience = conf.ClientID
-	_, err := cl.OpenIDConnectToken(ctx, req)
-	if err != nil {
-		t.Logf("Error fetching RPT: %s", err)
-		t.Fail()
+	if cl.Environment().SupportsUMA2() {
+		req := keycloak.NewOpenIDConnectTokenRequest(keycloak.GrantTypeUMA2Ticket)
+		req.Audience = conf.ClientID
+		_, err := cl.OpenIDConnectToken(ctx, req)
+		if err != nil {
+			t.Logf("Error fetching RPT: %s", err)
+			t.FailNow()
+			return
+		}
+	} else {
+		claims := new(keycloak.StandardClaims)
+		_, err := cl.ClientEntitlement(ctx, conf.ClientID, claims)
+		if err != nil {
+			t.Logf("Error fetching RPT: %s", err)
+			t.FailNow()
+			return
+		}
 	}
 }
