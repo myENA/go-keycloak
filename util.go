@@ -110,7 +110,7 @@ func compileBaseConfig(provided *APIClientConfig, mutators ...ConfigMutator) *AP
 
 	// ensure we have something to compare with
 	if provided == nil {
-		provided = DefaultAPIClientConfig(nil)
+		provided = DefaultAPIClientConfig([]TokenParser{NewX509TokenParser(NewPublicKeyCache())})
 	}
 
 	// execute mutators
