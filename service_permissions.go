@@ -5,28 +5,23 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"path"
 	"strings"
 
 	"github.com/google/go-querystring/query"
 )
 
 type PermissionsService struct {
-	as *AuthService
+	tc *TokenAPIClient
 }
 
-func NewPermissionsService(as *AuthService) *PermissionsService {
+func (tc *TokenAPIClient) PermissionsService() *PermissionsService {
 	ps := new(PermissionsService)
-	ps.as = as
+	ps.tc = tc
 	return ps
 }
 
-func (as *AuthService) Permissions() *PermissionsService {
-	return NewPermissionsService(as)
-}
-
 // Evaluate will return an array of permissions granted by the server
-func (b *PermissionsService) Evaluate(ctx context.Context, req *OpenIDConnectTokenRequest) (EvaluatedPermissions, error) {
+func (ps *PermissionsService) Evaluate(ctx context.Context, req *OpenIDConnectTokenRequest) (EvaluatedPermissions, error) {
 	var (
 		body  url.Values
 		resp  *http.Response
@@ -37,10 +32,10 @@ func (b *PermissionsService) Evaluate(ctx context.Context, req *OpenIDConnectTok
 		return nil, fmt.Errorf("error encoding request: %w", err)
 	}
 	body.Set(paramResponseMode, ResponseModePermissions)
-	resp, err = b.as.callRealms(
+	resp, err = ps.tc.Call(
 		ctx,
 		http.MethodPost,
-		path.Join(oidcTokenBits...),
+		ps.tc.env.TokenEndpoint(),
 		strings.NewReader(body.Encode()),
 		HeaderMutator(httpHeaderContentType, httpHeaderValueFormURLEncoded, true))
 	perms = make(EvaluatedPermissions, 0)
@@ -51,7 +46,7 @@ func (b *PermissionsService) Evaluate(ctx context.Context, req *OpenIDConnectTok
 }
 
 // Decide can be used to determine whether a bearer token is allowed the permission requested
-func (b *PermissionsService) Decide(ctx context.Context, req *OpenIDConnectTokenRequest) (bool, error) {
+func (ps *PermissionsService) Decide(ctx context.Context, req *OpenIDConnectTokenRequest) (bool, error) {
 	type respT struct {
 		Result bool `json:"result"`
 	}
@@ -66,10 +61,10 @@ func (b *PermissionsService) Decide(ctx context.Context, req *OpenIDConnectToken
 		return false, fmt.Errorf("error encoding request: %w", err)
 	}
 	body.Set(paramResponseMode, ResponseModeDecision)
-	resp, err = b.as.callRealms(
+	resp, err = ps.tc.callRealms(
 		ctx,
 		http.MethodPost,
-		path.Join(oidcTokenBits...),
+		ps.tc.env.TokenEndpoint(),
 		strings.NewReader(body.Encode()),
 		HeaderMutator(httpHeaderContentType, httpHeaderValueFormURLEncoded, true))
 	if err = handleResponse(resp, http.StatusOK, decision, err); err != nil {

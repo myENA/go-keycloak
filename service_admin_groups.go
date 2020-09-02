@@ -11,19 +11,15 @@ type AdminGroupsService struct {
 	kas *AdminService
 }
 
-func NewAdminGroupsService(kas *AdminService) *AdminGroupsService {
+func (s *AdminService) GroupsService() *AdminGroupsService {
 	gs := new(AdminGroupsService)
-	gs.kas = kas
+	gs.kas = s
 	return gs
-}
-
-func (k *AdminService) GroupsService() *AdminGroupsService {
-	return NewAdminGroupsService(k)
 }
 
 // List attempts to return to you a list of all the  groups within the Realm this client was created
 // with
-func (gs *AdminGroupsService) List(ctx context.Context, search string, first, max int) (Groups, error) {
+func (gs *AdminGroupsService) List(ctx context.Context, search string, first, max int, mutators ...RequestMutator) (Groups, error) {
 	var (
 		resp   *http.Response
 		groups Groups
@@ -34,9 +30,12 @@ func (gs *AdminGroupsService) List(ctx context.Context, search string, first, ma
 		http.MethodGet,
 		kcPathPartGroups,
 		nil,
-		ValuedQueryMutator("search", search, true),
-		ValuedQueryMutator("first", first, true),
-		ValuedQueryMutator("max", max, true))
+		addMutators(
+			mutators,
+			ValuedQueryMutator("search", search, true),
+			ValuedQueryMutator("first", first, true),
+			ValuedQueryMutator("max", max, true),
+		)...)
 	if err != nil {
 		return nil, err
 	}
@@ -48,7 +47,7 @@ func (gs *AdminGroupsService) List(ctx context.Context, search string, first, ma
 }
 
 // Count attempts to return a count of the total number of groups present in
-func (gs *AdminGroupsService) Count(ctx context.Context, search string, top bool) (int, error) {
+func (gs *AdminGroupsService) Count(ctx context.Context, search string, top bool, mutators ...RequestMutator) (int, error) {
 	var (
 		resp *http.Response
 		err  error
@@ -62,8 +61,11 @@ func (gs *AdminGroupsService) Count(ctx context.Context, search string, top bool
 		http.MethodGet,
 		path.Join(kcPathPartGroups, kcPathPartCount),
 		nil,
-		ValuedQueryMutator("search", search, true),
-		ValuedQueryMutator("top", strconv.FormatBool(top), true))
+		addMutators(
+			mutators,
+			ValuedQueryMutator("search", search, true),
+			ValuedQueryMutator("top", strconv.FormatBool(top), true),
+		)...)
 	if err = handleResponse(resp, http.StatusOK, model, err); err != nil {
 		return 0, err
 	}
@@ -72,13 +74,13 @@ func (gs *AdminGroupsService) Count(ctx context.Context, search string, top bool
 }
 
 // Get attempts to retrieve details of a specific  group within the realm this client was created with
-func (gs *AdminGroupsService) Get(ctx context.Context, groupID string) (*Group, error) {
+func (gs *AdminGroupsService) Get(ctx context.Context, groupID string, mutators ...RequestMutator) (*Group, error) {
 	var (
 		resp  *http.Response
 		group *Group
 		err   error
 	)
-	resp, err = gs.kas.callAdminRealms(ctx, http.MethodGet, path.Join(kcPathPartGroups, groupID), nil)
+	resp, err = gs.kas.callAdminRealms(ctx, http.MethodGet, path.Join(kcPathPartGroups, groupID), nil, mutators...)
 	group = new(Group)
 	if err = handleResponse(resp, http.StatusOK, group, err); err != nil {
 		return nil, err
@@ -88,13 +90,13 @@ func (gs *AdminGroupsService) Get(ctx context.Context, groupID string) (*Group, 
 
 // Members attempts to return to you a list of all the  Users present in the  group
 // specified within the realm this client was created with
-func (gs *AdminGroupsService) Members(ctx context.Context, groupID string) (Users, error) {
+func (gs *AdminGroupsService) Members(ctx context.Context, groupID string, mutators ...RequestMutator) (Users, error) {
 	var (
 		resp    *http.Response
 		members Users
 		err     error
 	)
-	resp, err = gs.kas.callAdminRealms(ctx, http.MethodGet, path.Join(kcPathPartGroups, groupID, kcPathPartMembers), nil)
+	resp, err = gs.kas.callAdminRealms(ctx, http.MethodGet, path.Join(kcPathPartGroups, groupID, kcPathPartMembers), nil, mutators...)
 	members = make(Users, 0)
 	if err = handleResponse(resp, http.StatusOK, &members, err); err != nil {
 		return nil, err
@@ -103,12 +105,12 @@ func (gs *AdminGroupsService) Members(ctx context.Context, groupID string) (User
 }
 
 // Create attempts to push a new group into , returning to you the ID of the newly created group.
-func (gs *AdminGroupsService) Create(ctx context.Context, group GroupCreate) ([]string, error) {
+func (gs *AdminGroupsService) Create(ctx context.Context, group GroupCreate, mutators ...RequestMutator) ([]string, error) {
 	var (
 		resp *http.Response
 		err  error
 	)
-	resp, err = gs.kas.callAdminRealms(ctx, http.MethodPost, kcPathPartClients, group)
+	resp, err = gs.kas.callAdminRealms(ctx, http.MethodPost, kcPathPartClients, group, mutators...)
 	if err = handleResponse(resp, http.StatusOK, nil, err); err != nil {
 		return nil, err
 	}
@@ -116,13 +118,13 @@ func (gs *AdminGroupsService) Create(ctx context.Context, group GroupCreate) ([]
 }
 
 // Delete attempts to delete a group from
-func (gs *AdminGroupsService) Delete(ctx context.Context, groupID string) error {
-	resp, err := gs.kas.callAdminRealms(ctx, http.MethodDelete, path.Join(kcPathPartGroups, groupID), nil)
+func (gs *AdminGroupsService) Delete(ctx context.Context, groupID string, mutators ...RequestMutator) error {
+	resp, err := gs.kas.callAdminRealms(ctx, http.MethodDelete, path.Join(kcPathPartGroups, groupID), nil, mutators...)
 	return handleResponse(resp, http.StatusOK, nil, err)
 }
 
 // Update attempts to push updated values for a specific group to
-func (gs *AdminGroupsService) Update(ctx context.Context, groupID string, group Group) error {
-	resp, err := gs.kas.callAdminRealms(ctx, http.MethodPut, path.Join(kcPathPartGroups, groupID), group)
+func (gs *AdminGroupsService) Update(ctx context.Context, groupID string, group Group, mutators ...RequestMutator) error {
+	resp, err := gs.kas.callAdminRealms(ctx, http.MethodPut, path.Join(kcPathPartGroups, groupID), group, mutators...)
 	return handleResponse(resp, http.StatusOK, nil, err)
 }

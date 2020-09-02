@@ -10,23 +10,19 @@ type AdminRolesService struct {
 	kas *AdminService
 }
 
-func NewAdminRolesService(kas *AdminService) *AdminRolesService {
+func (s *AdminService) RolesService() *AdminRolesService {
 	rs := new(AdminRolesService)
-	rs.kas = kas
+	rs.kas = s
 	return rs
 }
 
-func (k *AdminService) RolesService() *AdminRolesService {
-	return NewAdminRolesService(k)
-}
-
-func (rs *AdminRolesService) List(ctx context.Context) (Roles, error) {
+func (rs *AdminRolesService) List(ctx context.Context, mutators ...RequestMutator) (Roles, error) {
 	var (
 		resp  *http.Response
 		roles Roles
 		err   error
 	)
-	resp, err = rs.kas.callAdminRealms(ctx, http.MethodGet, kcPathPartRoles, nil)
+	resp, err = rs.kas.callAdminRealms(ctx, http.MethodGet, kcPathPartRoles, nil, mutators...)
 	roles = make(Roles, 0)
 	if err = handleResponse(resp, http.StatusOK, &roles, err); err != nil {
 		return nil, err
@@ -34,25 +30,25 @@ func (rs *AdminRolesService) List(ctx context.Context) (Roles, error) {
 	return roles, nil
 }
 
-func (rs *AdminRolesService) Create(ctx context.Context, role *Role) ([]string, error) {
+func (rs *AdminRolesService) Create(ctx context.Context, role *Role, mutators ...RequestMutator) ([]string, error) {
 	var (
 		resp *http.Response
 		err  error
 	)
-	resp, err = rs.kas.callAdminRealms(ctx, http.MethodPost, kcPathPartRoles, role, nil)
+	resp, err = rs.kas.callAdminRealms(ctx, http.MethodPost, kcPathPartRoles, role, mutators...)
 	if err = handleResponse(resp, http.StatusOK, nil, err); err != nil {
 		return nil, err
 	}
 	return parseResponseLocations(resp)
 }
 
-func (rs *AdminRolesService) Get(ctx context.Context, roleName string) (*Role, error) {
+func (rs *AdminRolesService) Get(ctx context.Context, roleName string, mutators ...RequestMutator) (*Role, error) {
 	var (
 		resp *http.Response
 		role *Role
 		err  error
 	)
-	resp, err = rs.kas.callAdminRealms(ctx, http.MethodGet, path.Join(kcPathPartRoles, roleName), nil)
+	resp, err = rs.kas.callAdminRealms(ctx, http.MethodGet, path.Join(kcPathPartRoles, roleName), nil, mutators...)
 	role = new(Role)
 	if err = handleResponse(resp, http.StatusOK, role, err); err != nil {
 		return nil, err
@@ -60,13 +56,13 @@ func (rs *AdminRolesService) Get(ctx context.Context, roleName string) (*Role, e
 	return role, nil
 }
 
-func (rs *AdminRolesService) Update(ctx context.Context, roleName string, role *Role) error {
-	resp, err := rs.kas.callAdminRealms(ctx, http.MethodPut, path.Join(kcPathPartRoles, roleName), role)
+func (rs *AdminRolesService) Update(ctx context.Context, roleName string, role *Role, mutators ...RequestMutator) error {
+	resp, err := rs.kas.callAdminRealms(ctx, http.MethodPut, path.Join(kcPathPartRoles, roleName), role, mutators...)
 	return handleResponse(resp, http.StatusOK, nil, err)
 }
 
-func (rs *AdminRolesService) Delete(ctx context.Context, roleName string) error {
-	resp, err := rs.kas.callAdminRealms(ctx, http.MethodDelete, path.Join(kcPathPartRoles, roleName), nil)
+func (rs *AdminRolesService) Delete(ctx context.Context, roleName string, mutators ...RequestMutator) error {
+	resp, err := rs.kas.callAdminRealms(ctx, http.MethodDelete, path.Join(kcPathPartRoles, roleName), nil, mutators...)
 	return handleResponse(resp, http.StatusOK, nil, err)
 }
 
@@ -75,28 +71,24 @@ type AdminRoleCompositesService struct {
 	roleName string
 }
 
-func NewAdminRoleCompositesService(kas *AdminService, roleName string) *AdminRoleCompositesService {
+func (s *AdminService) RoleCompositesService(roleName string) *AdminRoleCompositesService {
 	rcs := new(AdminRoleCompositesService)
-	rcs.kas = kas
+	rcs.kas = s
 	rcs.roleName = roleName
 	return rcs
-}
-
-func (k *AdminService) RoleCompositesService(roleName string) *AdminRoleCompositesService {
-	return NewAdminRoleCompositesService(k, roleName)
 }
 
 func (rs *AdminRolesService) CompositesService(roleName string) *AdminRoleCompositesService {
 	return rs.kas.RoleCompositesService(roleName)
 }
 
-func (rcs *AdminRoleCompositesService) List(ctx context.Context) (Roles, error) {
+func (rcs *AdminRoleCompositesService) List(ctx context.Context, mutators ...RequestMutator) (Roles, error) {
 	var (
 		resp  *http.Response
 		roles Roles
 		err   error
 	)
-	resp, err = rcs.kas.callAdminRealms(ctx, http.MethodGet, path.Join(kcPathPartRoles, rcs.roleName, kcPathPartComposites), nil)
+	resp, err = rcs.kas.callAdminRealms(ctx, http.MethodGet, path.Join(kcPathPartRoles, rcs.roleName, kcPathPartComposites), nil, mutators...)
 	roles = make(Roles, 0)
 	if err = handleResponse(resp, http.StatusOK, &roles, err); err != nil {
 		return nil, err
@@ -104,23 +96,23 @@ func (rcs *AdminRoleCompositesService) List(ctx context.Context) (Roles, error) 
 	return roles, nil
 }
 
-func (rcs *AdminRoleCompositesService) Add(ctx context.Context, roles Roles) error {
-	resp, err := rcs.kas.callAdminRealms(ctx, http.MethodPost, path.Join(kcPathPartRoles, rcs.roleName, kcPathPartComposites), roles)
+func (rcs *AdminRoleCompositesService) Add(ctx context.Context, roles Roles, mutators ...RequestMutator) error {
+	resp, err := rcs.kas.callAdminRealms(ctx, http.MethodPost, path.Join(kcPathPartRoles, rcs.roleName, kcPathPartComposites), roles, mutators...)
 	return handleResponse(resp, http.StatusOK, nil, err)
 }
 
-func (rcs *AdminRoleCompositesService) Remove(ctx context.Context, roles Roles) error {
-	resp, err := rcs.kas.callAdminRealms(ctx, http.MethodDelete, path.Join(kcPathPartRoles, rcs.roleName, kcPathPartComposites), roles)
+func (rcs *AdminRoleCompositesService) Remove(ctx context.Context, roles Roles, mutators ...RequestMutator) error {
+	resp, err := rcs.kas.callAdminRealms(ctx, http.MethodDelete, path.Join(kcPathPartRoles, rcs.roleName, kcPathPartComposites), roles, mutators...)
 	return handleResponse(resp, http.StatusOK, nil, err)
 }
 
-func (rcs *AdminRoleCompositesService) ClientRoles(ctx context.Context, clientName string) (Roles, error) {
+func (rcs *AdminRoleCompositesService) ClientRoles(ctx context.Context, clientName string, mutators ...RequestMutator) (Roles, error) {
 	var (
 		resp  *http.Response
 		roles Roles
 		err   error
 	)
-	resp, err = rcs.kas.callAdminRealms(ctx, http.MethodGet, path.Join(kcPathPartRoles, rcs.roleName, kcPathPartComposites, kcPathPartClients, clientName), nil)
+	resp, err = rcs.kas.callAdminRealms(ctx, http.MethodGet, path.Join(kcPathPartRoles, rcs.roleName, kcPathPartComposites, kcPathPartClients, clientName), nil, mutators...)
 	roles = make(Roles, 0)
 	if err = handleResponse(resp, http.StatusOK, &roles, err); err != nil {
 		return nil, err
@@ -128,13 +120,13 @@ func (rcs *AdminRoleCompositesService) ClientRoles(ctx context.Context, clientNa
 	return roles, nil
 }
 
-func (rcs *AdminRoleCompositesService) RealmRoles(ctx context.Context) (Roles, error) {
+func (rcs *AdminRoleCompositesService) RealmRoles(ctx context.Context, mutators ...RequestMutator) (Roles, error) {
 	var (
 		resp  *http.Response
 		roles Roles
 		err   error
 	)
-	resp, err = rcs.kas.callAdminRealms(ctx, http.MethodGet, path.Join(kcPathPartRoles, rcs.roleName, kcPathPartComposites, kcPathPartRealm), nil)
+	resp, err = rcs.kas.callAdminRealms(ctx, http.MethodGet, path.Join(kcPathPartRoles, rcs.roleName, kcPathPartComposites, kcPathPartRealm), nil, mutators...)
 	roles = make(Roles, 0)
 	if err = handleResponse(resp, http.StatusOK, &roles, err); err != nil {
 		return nil, err

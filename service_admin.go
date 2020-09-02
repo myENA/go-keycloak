@@ -2,7 +2,6 @@ package keycloak
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net/http"
 	"path"
@@ -11,23 +10,20 @@ import (
 // AdminService is the container for all modeled API calls that hit the /admin/{realm}/... series of endpoints
 // in
 type AdminService struct {
-	*baseService
+	tc *TokenAPIClient
 }
 
-// NewAdminService will return to you a new realm admin service that also contains base modeled api calls.
-func NewAdminService(c *APIClient) *AdminService {
+func (tc *TokenAPIClient) AdminService() *AdminService {
 	kc := new(AdminService)
-	kc.baseService = newBaseService(c)
+	kc.tc = tc
 	return kc
 }
 
-func (k *AdminService) callAdminRealms(ctx context.Context, method, requestPath string, body interface{}, mutators ...RequestMutator) (*http.Response, error) {
-	var err error
-	if ctx, err = k.c.RequireAllContextValues(ctx); err != nil {
-		return nil, err
-	}
-	if requestPath, err = k.adminRealmsPath(ctx, requestPath); err != nil {
-		return nil, err
-	}
-	return k.c.Call(ctx, method, requestPath, body, mutators...)
+// AdminRealmsPath builds a request path under the /admin/realms/{realm}/... path
+func (s *AdminService) adminRealmsPath(bits ...string) string {
+	return fmt.Sprintf(kcURLPathAdminRealmsFormat, s.tc.PathPrefix(), s.tc.RealmName(), path.Join(bits...))
+}
+
+func (s *AdminService) callAdminRealms(ctx context.Context, method, requestPath string, body interface{}, mutators ...RequestMutator) (*http.Response, error) {
+	return s.tc.Call(ctx, method, s.adminRealmsPath(requestPath), body, mutators...)
 }

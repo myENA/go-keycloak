@@ -8,7 +8,6 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"sync"
 
 	"github.com/dgrijalva/jwt-go"
 )
@@ -18,31 +17,6 @@ type TokenParser interface {
 	// Parse must attempt to validate the provided token was signed using the mechanism expected by the realm's issuer
 	Parse(context.Context, *RealmAPIClient, *jwt.Token) (pk interface{}, err error)
 	SupportedAlgorithms() []string
-}
-
-var (
-	tokenParsers   map[string]TokenParser
-	tokenParsersMu sync.RWMutex
-)
-
-func init() {
-	tokenParsers = make(map[string]TokenParser)
-	RegisterTokenParser(NewX509TokenParser(NewPublicKeyCache()))
-}
-
-func RegisterTokenParser(tp TokenParser) {
-	tokenParsersMu.Lock()
-	defer tokenParsersMu.Unlock()
-	for _, n := range tp.SupportedAlgorithms() {
-		tokenParsers[n] = tp
-	}
-}
-
-func AlgTokenParser(alg string) (TokenParser, bool) {
-	tokenParsersMu.RLock()
-	defer tokenParsersMu.RUnlock()
-	tp, ok := tokenParsers[alg]
-	return tp, ok
 }
 
 type X509TokenParser struct {

@@ -106,11 +106,11 @@ func parseAndReturnLocations(resp *http.Response) ([]string, error) {
 }
 
 func compileBaseConfig(provided *APIClientConfig, mutators ...ConfigMutator) *APIClientConfig {
-	actual := DefaultAPIClientConfig()
+	actual := DefaultAPIClientConfig(nil)
 
 	// ensure we have something to compare with
 	if provided == nil {
-		provided = DefaultAPIClientConfig()
+		provided = DefaultAPIClientConfig(nil)
 	}
 
 	// execute mutators
@@ -209,9 +209,9 @@ func copyStrs(src []string) []string {
 	return dst
 }
 
-func addMutator(m RequestMutator, dst []RequestMutator) []RequestMutator {
-	if dst == nil {
-		dst = make([]RequestMutator, 0)
+func addMutators(root []RequestMutator, m ...RequestMutator) []RequestMutator {
+	if root == nil {
+		root = make([]RequestMutator, 0)
 	}
-	return append(dst, m)
+	return append(root, m...)
 }

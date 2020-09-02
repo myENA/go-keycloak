@@ -30,15 +30,14 @@ func usableClientID(t *testing.T) string {
 
 type staticTP string
 
-func (tp *staticTP) BearerToken(ctx context.Context, _ *keycloak2.RealmAPIClient) (string, error) {
-	return keycloak.TokenContext(ctx, string(*tp)), nil
+func (tp staticTP) BearerToken(ctx context.Context, _ *keycloak.RealmAPIClient) (string, error) {
+	return string(tp), nil
 }
 
-func newClient(t *testing.T, mutators ...keycloak.ConfigMutator) *keycloak.APIClient {
+func newClient(t *testing.T, mutators ...keycloak.ConfigMutator) *keycloak.TokenAPIClient {
 	t.Helper()
 	var (
 		ip  keycloak.IssuerProvider
-		rp  keycloak.RealmConfigurationProvider
 		tp  keycloak.TokenProvider
 		err error
 
@@ -51,11 +50,6 @@ func newClient(t *testing.T, mutators ...keycloak.ConfigMutator) *keycloak.APICl
 		ip = keycloak.NewStaticIssuerProvider(issAddr)
 	}
 
-	if kcRealm != "" {
-		rp = keycloak.NewSimpleRealmConfigProvider(kcRealm)
-		t.Logf("Using SimpleRealmConfigurationProvider with realm %q", kcRealm)
-	}
-
 	if bt != "" {
 		stp := new(staticTP)
 		*stp = staticTP(bt)
@@ -63,10 +57,8 @@ func newClient(t *testing.T, mutators ...keycloak.ConfigMutator) *keycloak.APICl
 		t.Logf("Using test-only StaticTokenProvider with token: %s", bt)
 	}
 
-	conf := keycloak.DefaultAPIClientConfig()
+	conf := keycloak.DefaultAPIClientConfig([]keycloak.TokenParser{keycloak.NewX509TokenParser(keycloak.NewPublicKeyCache())})
 	conf.IssuerProvider = ip
-	conf.RealmProvider = rp
-	conf.TokenProvider = tp
 
 	cl, err := keycloak.NewAPIClient(conf, mutators...)
 	if err != nil {
