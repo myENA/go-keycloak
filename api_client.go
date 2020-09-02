@@ -535,6 +535,8 @@ func (e *RealmEnvConfig) PolicyEndpoint() (string, bool) {
 	return "", false
 }
 
+// RealmAPIClient is intended for use against a singular realm within your Keycloak instance. All internal calls will
+// be scoped to the provided realm
 type RealmAPIClient struct {
 	*APIClient
 	log zerolog.Logger
@@ -564,32 +566,6 @@ func (c *APIClient) RealmAPIClient(ctx context.Context, realmName string, mutato
 	}
 
 	return rc, nil
-}
-
-func (c *APIClient) TokenAPIClient(ctx context.Context, realmName string, tp TokenProvider, mutators ...RequestMutator) (*TokenAPIClient, error) {
-	var (
-		rc  *RealmAPIClient
-		err error
-	)
-	if rc, err = c.RealmAPIClient(ctx, realmName, mutators...); err != nil {
-		return nil, err
-	}
-	return rc.TokenClient(tp)
-}
-
-func (c *APIClient) TokenAPIClientFromProvider(ctx context.Context, tp FixedRealmTokenProvider, mutators ...RequestMutator) (*TokenAPIClient, error) {
-	return c.TokenAPIClient(ctx, tp.TargetRealm(), tp, mutators...)
-}
-
-func (c *APIClient) TokenAPIClientForConfidentialClient(ctx context.Context, tpc *ConfidentialClientTokenProviderConfig, mutators ...RequestMutator) (*TokenAPIClient, error) {
-	var (
-		tp  *ConfidentialClientTokenProvider
-		err error
-	)
-	if tp, err = NewConfidentialClientTokenProvider(tpc); err != nil {
-		return nil, fmt.Errorf("error constructing confidential client token provider: %w", err)
-	}
-	return c.TokenAPIClientFromProvider(ctx, tp, mutators...)
 }
 
 // RealmName returns the realm this client instance is scoped to
@@ -790,7 +766,8 @@ func (rc *RealmAPIClient) keyFunc(ctx context.Context) jwt.Keyfunc {
 
 // TokenAPIClient
 //
-// This is an extension of the RealmAPIClient that is further scoped by a single TokenProvider
+// This is an extension of the RealmAPIClient that is further scoped by a single TokenProvider, where all requests will
+// have the provided token sent in the Authorization header.
 type TokenAPIClient struct {
 	*RealmAPIClient
 	tp TokenProvider
@@ -803,6 +780,32 @@ func (rc *RealmAPIClient) TokenClient(tp TokenProvider) (*TokenAPIClient, error)
 	tc := new(TokenAPIClient)
 	tc.tp = tp
 	return tc, nil
+}
+
+func (c *APIClient) TokenAPIClient(ctx context.Context, realmName string, tp TokenProvider, mutators ...RequestMutator) (*TokenAPIClient, error) {
+	var (
+		rc  *RealmAPIClient
+		err error
+	)
+	if rc, err = c.RealmAPIClient(ctx, realmName, mutators...); err != nil {
+		return nil, err
+	}
+	return rc.TokenClient(tp)
+}
+
+func (c *APIClient) TokenAPIClientFromProvider(ctx context.Context, tp FixedRealmTokenProvider, mutators ...RequestMutator) (*TokenAPIClient, error) {
+	return c.TokenAPIClient(ctx, tp.TargetRealm(), tp, mutators...)
+}
+
+func (c *APIClient) TokenAPIClientForConfidentialClient(ctx context.Context, tpc *ConfidentialClientTokenProviderConfig, mutators ...RequestMutator) (*TokenAPIClient, error) {
+	var (
+		tp  *ConfidentialClientTokenProvider
+		err error
+	)
+	if tp, err = NewConfidentialClientTokenProvider(tpc); err != nil {
+		return nil, fmt.Errorf("error constructing confidential client token provider: %w", err)
+	}
+	return c.TokenAPIClientFromProvider(ctx, tp, mutators...)
 }
 
 func (tc *TokenAPIClient) TokenProvider() TokenProvider {

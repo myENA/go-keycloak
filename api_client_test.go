@@ -28,53 +28,79 @@ func usableClientID(t *testing.T) string {
 	return cid
 }
 
-type staticTP string
+type staticTP struct {
+	token string
+	realm string
+}
+
+func (tp staticTP) TargetRealm() string {
+	return tp.realm
+}
 
 func (tp staticTP) BearerToken() (string, error) {
-	return string(tp), nil
+	return tp.token, nil
+}
+
+func newStaticTP(token, realm string) staticTP {
+	return staticTP{token, realm}
 }
 
 func newClient(t *testing.T, mutators ...keycloak.ConfigMutator) *keycloak.TokenAPIClient {
 	t.Helper()
 	var (
 		ip  keycloak.IssuerProvider
-		tp  keycloak.TokenProvider
+		tp  keycloak.FixedRealmTokenProvider
 		err error
 
-		issAddr = os.Getenv(EnvIssuerAddr)
-		kcRealm = os.Getenv(EnvKeycloakRealm)
-		bt      = os.Getenv(EnvBearerToken)
+		issAddr     = os.Getenv(EnvIssuerAddr)
+		kcRealm     = os.Getenv(EnvKeycloakRealm)
+		bearerToken = os.Getenv(EnvBearerToken)
 	)
 
 	if issAddr != "" {
 		ip = keycloak.NewStaticIssuerProvider(issAddr)
 	}
 
-	if bt != "" {
-		stp := new(staticTP)
-		*stp = staticTP(bt)
-		tp = stp
-		t.Logf("Using test-only StaticTokenProvider with token: %s", bt)
+	if bearerToken != "" {
+		tp = newStaticTP(bearerToken, kcRealm)
+		t.Logf("Using test-only StaticTokenProvider with token: %s", bearerToken)
 	}
 
-	conf := keycloak.DefaultAPIClientConfig([]keycloak.TokenParser{keycloak.NewX509TokenParser(keycloak.NewPublicKeyCache())})
-	conf.IssuerProvider = ip
+	if mutators == nil {
+		mutators = make([]keycloak.ConfigMutator, 0)
+	}
+	mutators = append(
+		mutators,
+		func(config *keycloak.APIClientConfig) {
+			config.IssuerProvider = ip
+		},
+	)
 
-	cl, err := keycloak.NewAPIClient(conf, mutators...)
+	cl, err := keycloak.NewAPIClient(nil, mutators...)
 	if err != nil {
-		t.Logf("Error creating client: %s", err)
+		t.Logf("Error creating api client: %s", err)
 		t.FailNow()
+		return nil
 	}
-	return cl
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	tcl, err := cl.TokenAPIClientFromProvider(ctx, tp)
+	if err != nil {
+		t.Logf("Error creating token api client: %v", err)
+		t.FailNow()
+		return nil
+	}
+
+	return tcl
 }
 
 func TestRealmIssuerConfig(t *testing.T) {
 	t.Parallel()
 	cl := newClient(t)
-	ks := cl.AuthService()
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	config, err := ks.RealmIssuerConfiguration(ctx)
+	config, err := cl.RealmIssuerConfiguration(ctx)
 	if err != nil {
 		t.Logf("Error fetching Realm Issuer Configuration: %s", err)
 		t.Fail()
@@ -87,10 +113,9 @@ func TestWellKnownConfigs(t *testing.T) {
 	t.Run("oidc", func(t *testing.T) {
 		t.Parallel()
 		cl := newClient(t)
-		ks := cl.AuthService()
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
-		oidc, err := ks.OpenIDConfiguration(ctx)
+		oidc, err := cl.OpenIDConfiguration(ctx)
 		if err != nil {
 			t.Logf("Error fetching OIDC: %s", err)
 			t.Fail()
@@ -101,10 +126,9 @@ func TestWellKnownConfigs(t *testing.T) {
 	t.Run("uma2", func(t *testing.T) {
 		t.Parallel()
 		cl := newClient(t)
-		ks := cl.AuthService()
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
-		uma2, err := ks.UMA2Configuration(ctx)
+		uma2, err := cl.UMA2Configuration(ctx)
 		if err != nil {
 			if keycloak.IsAPIError(err) && err.(*keycloak.APIError).ResponseCode != http.StatusNotFound {
 				t.Logf("Error fetching UMA2 config: %s", err)
@@ -121,27 +145,12 @@ func TestRPT(t *testing.T) {
 	t.Parallel()
 	cl := newClient(t)
 	cid := usableClientID(t)
-	ks := cl.AuthService()
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
-	ctx, err := cl.RequireToken(ctx)
-	if err != nil {
-		t.Logf("Error requiring token: %v", err)
-		t.FailNow()
-		return
-	}
-
-	_, ok := keycloak.ContextToken(ctx)
-	if !ok {
-		t.Log("Token missing from context")
-		t.FailNow()
-		return
-	}
-
 	req := keycloak.NewOpenIDConnectTokenRequest(keycloak.GrantTypeUMA2Ticket)
 	req.Audience = cid
-	_, err = ks.OpenIDConnectToken(ctx, req)
+	_, err := cl.OpenIDConnectToken(ctx, req)
 	if err != nil {
 		t.Logf("Error fetching RPT: %s", err)
 		t.Fail()
