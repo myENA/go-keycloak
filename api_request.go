@@ -327,12 +327,16 @@ func (r *APIRequest) CompiledURI() string {
 // ToHTTP will attempt to construct an executable http.request
 func (r *APIRequest) ToHTTP(ctx context.Context, addr string) (*http.Request, error) {
 	var (
-		compiledURL string
 		httpRequest *http.Request
 		err         error
+
+		compiledURL = r.CompiledURI()
 	)
 
-	compiledURL = fmt.Sprintf(apiRequestURLFormat, addr, r.CompiledURI())
+	// todo: not the biggest fan of this, redesign call structure.
+	if !strings.HasPrefix(compiledURL, addr) {
+		compiledURL = fmt.Sprintf(apiRequestURLFormat, addr, compiledURL)
+	}
 
 	if r.mpw != nil {
 		r.SetHeader(headerKeyContentType, r.mpw.FormDataContentType())
@@ -342,9 +346,6 @@ func (r *APIRequest) ToHTTP(ctx context.Context, addr string) (*http.Request, er
 	}
 
 	r.Headers().Add("Accept", headerValueApplicationJSON)
-	if r.bodyLen > 0 {
-		r.Headers().Add("Content-Length", strconv.Itoa(r.bodyLen))
-	}
 
 	if httpRequest, err = http.NewRequestWithContext(ctx, r.method, compiledURL, r.Body()); err != nil {
 		return nil, err

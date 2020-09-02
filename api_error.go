@@ -22,7 +22,6 @@ func newAPIError(resp *http.Response) *APIError {
 	e.ResponseStatus = resp.Status
 	e.ResponseHeaders = resp.Header
 	_ = json.NewDecoder(resp.Body).Decode(e)
-
 	return e
 }
 
