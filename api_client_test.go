@@ -2,6 +2,7 @@ package keycloak_test
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"os"
 	"testing"
@@ -45,25 +46,17 @@ func newStaticTP(token, realm string) staticTP {
 	return staticTP{token, realm}
 }
 
-func newClient(t *testing.T, mutators ...keycloak.ConfigMutator) *keycloak.TokenAPIClient {
+func newClient(t *testing.T, mutators ...keycloak.ConfigMutator) *keycloak.APIClient {
 	t.Helper()
 	var (
 		ip  keycloak.IssuerProvider
-		tp  keycloak.FixedRealmTokenProvider
 		err error
 
-		issAddr     = os.Getenv(EnvIssuerAddr)
-		kcRealm     = os.Getenv(EnvKeycloakRealm)
-		bearerToken = os.Getenv(EnvBearerToken)
+		issAddr = os.Getenv(EnvIssuerAddr)
 	)
 
 	if issAddr != "" {
 		ip = keycloak.NewStaticIssuerProvider(issAddr)
-	}
-
-	if bearerToken != "" {
-		tp = newStaticTP(bearerToken, kcRealm)
-		t.Logf("Using test-only StaticTokenProvider with token: %s", bearerToken)
 	}
 
 	if mutators == nil {
@@ -83,21 +76,64 @@ func newClient(t *testing.T, mutators ...keycloak.ConfigMutator) *keycloak.Token
 		return nil
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	return cl
+}
+
+func newRealmClient(t *testing.T, mutators ...keycloak.ConfigMutator) *keycloak.RealmAPIClient {
+	var (
+		cl  *keycloak.APIClient
+		err error
+
+		kcRealm = os.Getenv(EnvKeycloakRealm)
+	)
+
+	if cl = newClient(t, mutators...); cl == nil {
+		return nil
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	tcl, err := cl.TokenAPIClientFromProvider(ctx, tp)
+	rc, err := cl.RealmAPIClient(ctx, kcRealm)
 	if err != nil {
-		t.Logf("Error creating token api client: %v", err)
+		t.Logf("Error constructing realm client: %v", err)
 		t.FailNow()
 		return nil
 	}
 
-	return tcl
+	return rc
+}
+
+func newTokenClient(t *testing.T, mutators ...keycloak.ConfigMutator) *keycloak.TokenAPIClient {
+	var (
+		rc  *keycloak.RealmAPIClient
+		tc  *keycloak.TokenAPIClient
+		err error
+
+		bearerToken = os.Getenv(EnvBearerToken)
+	)
+
+	if bearerToken == "" {
+		t.Logf("missing %q env var", EnvBearerToken)
+		t.FailNow()
+		return nil
+	}
+
+	if rc = newRealmClient(t, mutators...); rc == nil {
+		return nil
+	}
+
+	if tc, err = rc.TokenAPIClient(newStaticTP(bearerToken, rc.RealmName())); err != nil {
+		t.Logf("Error constructing token client: %v", err)
+		t.FailNow()
+		return nil
+	}
+
+	return tc
 }
 
 func TestRealmIssuerConfig(t *testing.T) {
 	t.Parallel()
-	cl := newClient(t)
+	cl := newRealmClient(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 	config, err := cl.RealmIssuerConfiguration(ctx)
@@ -112,7 +148,7 @@ func TestRealmIssuerConfig(t *testing.T) {
 func TestWellKnownConfigs(t *testing.T) {
 	t.Run("oidc", func(t *testing.T) {
 		t.Parallel()
-		cl := newClient(t)
+		cl := newRealmClient(t)
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
 		oidc, err := cl.OpenIDConfiguration(ctx)
@@ -120,12 +156,13 @@ func TestWellKnownConfigs(t *testing.T) {
 			t.Logf("Error fetching OIDC: %s", err)
 			t.Fail()
 		} else {
-			t.Logf("oidc=%v", oidc)
+			b, _ := json.Marshal(oidc)
+			t.Logf("oidc=%s", b)
 		}
 	})
 	t.Run("uma2", func(t *testing.T) {
 		t.Parallel()
-		cl := newClient(t)
+		cl := newRealmClient(t)
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
 		uma2, err := cl.UMA2Configuration(ctx)
@@ -136,14 +173,15 @@ func TestWellKnownConfigs(t *testing.T) {
 			}
 			t.Log("It appears your Keycloak instance does not support uma2")
 		} else {
-			t.Logf("uma2=%v", uma2)
+			b, _ := json.Marshal(uma2)
+			t.Logf("uma2=%s", b)
 		}
 	})
 }
 
 func TestRPT(t *testing.T) {
 	t.Parallel()
-	cl := newClient(t)
+	cl := newTokenClient(t)
 	cid := usableClientID(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()

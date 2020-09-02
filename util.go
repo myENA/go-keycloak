@@ -106,11 +106,11 @@ func parseAndReturnLocations(resp *http.Response) ([]string, error) {
 }
 
 func compileBaseConfig(provided *APIClientConfig, mutators ...ConfigMutator) *APIClientConfig {
-	actual := DefaultAPIClientConfig(nil)
+	actual := DefaultAPIClientConfig()
 
 	// ensure we have something to compare with
 	if provided == nil {
-		provided = DefaultAPIClientConfig([]TokenParser{NewX509TokenParser(NewPublicKeyCache())})
+		provided = DefaultAPIClientConfig()
 	}
 
 	// execute mutators
@@ -128,6 +128,10 @@ func compileBaseConfig(provided *APIClientConfig, mutators ...ConfigMutator) *AP
 	// url paths
 	if provided.PathPrefix != "" {
 		actual.PathPrefix = provided.PathPrefix
+	}
+
+	if len(provided.TokenParsers) > 0 {
+		actual.TokenParsers = provided.TokenParsers
 	}
 
 	// misc clients

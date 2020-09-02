@@ -134,11 +134,11 @@ type APIClientConfig struct {
 	Debug *DebugConfig
 }
 
-func DefaultAPIClientConfig(tokenParsers []TokenParser) *APIClientConfig {
+func DefaultAPIClientConfig() *APIClientConfig {
 	c := APIClientConfig{
 		PathPrefix:     DefaultPathPrefix,
 		IssuerProvider: defaultIssuerProvider(),
-		TokenParsers:   tokenParsers,
+		TokenParsers:   []TokenParser{NewX509TokenParser(NewPublicKeyCache())},
 		HTTPClient:     cleanhttp.DefaultClient(),
 		Logger:         DefaultZerologLogger(),
 		Debug:          new(DebugConfig),
@@ -146,22 +146,32 @@ func DefaultAPIClientConfig(tokenParsers []TokenParser) *APIClientConfig {
 	return &c
 }
 
-// APIClient
-//
-// The APIClient is the root of the entire package.
-type APIClient struct {
-	log zerolog.Logger
+type (
+	apiCallFunc func(ctx context.Context, method, requestPath string, body interface{}, mutators ...RequestMutator) (*http.Response, error)
 
-	issAddr    string
-	pathPrefix string
+	apiClient struct {
+		log zerolog.Logger
 
-	tps   map[string]TokenParser
-	tpsMu sync.RWMutex
+		issAddr    string
+		pathPrefix string
 
-	mr requestMutatorRunner
+		tps   map[string]TokenParser
+		tpsMu sync.RWMutex
 
-	hc *http.Client
-}
+		mr requestMutatorRunner
+
+		hc *http.Client
+
+		callFn apiCallFunc
+	}
+
+	// APIClient
+	//
+	// This is the base client for interacting with a Keycloak instance
+	APIClient struct {
+		*apiClient
+	}
+)
 
 // NewAPIClient will attempt to construct and return a APIClient to you
 func NewAPIClient(config *APIClientConfig, mutators ...ConfigMutator) (*APIClient, error) {
@@ -171,6 +181,9 @@ func NewAPIClient(config *APIClientConfig, mutators ...ConfigMutator) (*APIClien
 
 		cl = new(APIClient)
 	)
+
+	cl.apiClient = new(apiClient)
+	cl.apiClient.callFn = cl.Call
 
 	cc = compileBaseConfig(config, mutators...)
 
@@ -193,29 +206,29 @@ func NewAPIClient(config *APIClientConfig, mutators ...ConfigMutator) (*APIClien
 
 // NewAPIClientWithIssuerAddress is a shortcut constructor that only requires you provide the address of the keycloak
 // instance this client will be executing calls against
-func NewAPIClientWithIssuerAddress(issuerAddress string, tokenParsers []TokenParser, mutators ...ConfigMutator) (*APIClient, error) {
-	conf := DefaultAPIClientConfig(tokenParsers)
+func NewAPIClientWithIssuerAddress(issuerAddress string, mutators ...ConfigMutator) (*APIClient, error) {
+	conf := DefaultAPIClientConfig()
 	conf.IssuerProvider = NewStaticIssuerProvider(issuerAddress)
 	return NewAPIClient(conf, mutators...)
 }
 
-func (c *APIClient) PathPrefix() string {
+func (c *apiClient) PathPrefix() string {
 	return c.pathPrefix
 }
 
 // IssuerAddress will return the address of the issuer this client is targeting
-func (c *APIClient) IssuerAddress() string {
+func (c *apiClient) IssuerAddress() string {
 	return c.issAddr
 }
 
-func (c *APIClient) TokenParser(alg string) (TokenParser, bool) {
+func (c *apiClient) TokenParser(alg string) (TokenParser, bool) {
 	c.tpsMu.RLock()
 	defer c.tpsMu.RUnlock()
 	tp, ok := c.tps[alg]
 	return tp, ok
 }
 
-func (c *APIClient) RegisterTokenParsers(tps ...TokenParser) {
+func (c *apiClient) RegisterTokenParsers(tps ...TokenParser) {
 	c.tpsMu.Lock()
 	defer c.tpsMu.Unlock()
 	for _, tp := range tps {
@@ -225,7 +238,7 @@ func (c *APIClient) RegisterTokenParsers(tps ...TokenParser) {
 	}
 }
 
-func (c *APIClient) Do(ctx context.Context, req *APIRequest, mutators ...RequestMutator) (*http.Response, error) {
+func (c *apiClient) Do(ctx context.Context, req *APIRequest, mutators ...RequestMutator) (*http.Response, error) {
 	var (
 		httpRequest  *http.Request
 		httpResponse *http.Response
@@ -276,13 +289,13 @@ func (c *APIClient) Call(ctx context.Context, method, requestPath string, body i
 
 // RealmIssuerConfiguration returns metadata about the keycloak realm instance being connected to, such as the public
 // key for token signing.
-func (c *APIClient) RealmIssuerConfiguration(ctx context.Context, realmName string, mutators ...RequestMutator) (*RealmIssuerConfiguration, error) {
+func (c *apiClient) RealmIssuerConfiguration(ctx context.Context, realmName string, mutators ...RequestMutator) (*RealmIssuerConfiguration, error) {
 	var (
 		resp *http.Response
 		ic   *RealmIssuerConfiguration
 		err  error
 	)
-	resp, err = c.Call(ctx, http.MethodGet, c.realmsPath(realmName), nil, mutators...)
+	resp, err = c.callFn(ctx, http.MethodGet, c.realmsPath(realmName), nil, mutators...)
 	ic = new(RealmIssuerConfiguration)
 	if err = handleResponse(resp, http.StatusOK, ic, err); err != nil {
 		return nil, err
@@ -291,13 +304,13 @@ func (c *APIClient) RealmIssuerConfiguration(ctx context.Context, realmName stri
 }
 
 // OpenIDConfiguration returns well-known open-id configuration values for the provided realm
-func (c *APIClient) OpenIDConfiguration(ctx context.Context, realmName string, mutators ...RequestMutator) (*OpenIDConfiguration, error) {
+func (c *apiClient) OpenIDConfiguration(ctx context.Context, realmName string, mutators ...RequestMutator) (*OpenIDConfiguration, error) {
 	var (
 		resp *http.Response
 		oidc *OpenIDConfiguration
 		err  error
 	)
-	resp, err = c.Call(ctx, http.MethodGet, c.realmsPath(realmName, kcPathOIDC), nil, mutators...)
+	resp, err = c.callFn(ctx, http.MethodGet, c.realmsPath(realmName, kcPathOIDC), nil, mutators...)
 	oidc = new(OpenIDConfiguration)
 	if err = handleResponse(resp, http.StatusOK, oidc, err); err != nil {
 		return nil, err
@@ -307,13 +320,13 @@ func (c *APIClient) OpenIDConfiguration(ctx context.Context, realmName string, m
 
 // UMA2Configuration returns well-known uma2 configuration values for the provided realm, assuming you are running
 // keycloak > 3.4
-func (c *APIClient) UMA2Configuration(ctx context.Context, realmName string, mutators ...RequestMutator) (*UMA2Configuration, error) {
+func (c *apiClient) UMA2Configuration(ctx context.Context, realmName string, mutators ...RequestMutator) (*UMA2Configuration, error) {
 	var (
 		resp *http.Response
 		uma2 *UMA2Configuration
 		err  error
 	)
-	resp, err = c.Call(ctx, http.MethodGet, c.realmsPath(realmName, kcPathUMA2C), nil, mutators...)
+	resp, err = c.callFn(ctx, http.MethodGet, c.realmsPath(realmName, kcPathUMA2C), nil, mutators...)
 	uma2 = new(UMA2Configuration)
 	if err = handleResponse(resp, http.StatusOK, uma2, err); err != nil {
 		return nil, err
@@ -322,7 +335,7 @@ func (c *APIClient) UMA2Configuration(ctx context.Context, realmName string, mut
 }
 
 // basePath builds a request path under the configured prefix... path
-func (c *APIClient) basePath(bits ...string) string {
+func (c *apiClient) basePath(bits ...string) string {
 	if len(bits) == 0 {
 		return c.pathPrefix
 	}
@@ -330,12 +343,12 @@ func (c *APIClient) basePath(bits ...string) string {
 }
 
 // realmsPath builds a request path under the /realms/{realm}/... path
-func (c *APIClient) realmsPath(realm string, bits ...string) string {
+func (c *apiClient) realmsPath(realm string, bits ...string) string {
 	return fmt.Sprintf(kcURLPathRealmsFormat, c.pathPrefix, realm, path.Join(bits...))
 }
 
 // adminRealmsPath builds a request path under the /admin/realms/{realm}/... path
-func (c *APIClient) adminRealmsPath(realm string, bits ...string) (string, error) {
+func (c *apiClient) adminRealmsPath(realm string, bits ...string) (string, error) {
 	return fmt.Sprintf(kcURLPathAdminRealmsFormat, c.pathPrefix, realm, path.Join(bits...)), nil
 }
 
@@ -535,14 +548,27 @@ func (e *RealmEnvConfig) PolicyEndpoint() (string, bool) {
 	return "", false
 }
 
-// RealmAPIClient is intended for use against a singular realm within your Keycloak instance. All internal calls will
-// be scoped to the provided realm
-type RealmAPIClient struct {
-	*APIClient
-	log zerolog.Logger
-	rn  string
-	env *RealmEnvConfig
-}
+type (
+	realmAPICallFunc func(ctx context.Context, tp TokenProvider, method, requestPath string, body interface{}, mutators ...RequestMutator) (*http.Response, error)
+
+	realmAPIKeyFunc func(context.Context) jwt.Keyfunc
+
+	realmAPIClient struct {
+		*apiClient
+		log zerolog.Logger
+		rn  string
+		env *RealmEnvConfig
+
+		callFn realmAPICallFunc
+		keyFn  realmAPIKeyFunc
+	}
+
+	// RealmAPIClient is intended for use against a singular realm within your Keycloak instance. All internal calls will
+	// be scoped to the provided realm
+	RealmAPIClient struct {
+		*realmAPIClient
+	}
+)
 
 func (c *APIClient) RealmAPIClient(ctx context.Context, realmName string, mutators ...RequestMutator) (*RealmAPIClient, error) {
 	var (
@@ -550,9 +576,12 @@ func (c *APIClient) RealmAPIClient(ctx context.Context, realmName string, mutato
 
 		rc = new(RealmAPIClient)
 	)
+	rc.realmAPIClient = new(realmAPIClient)
+	rc.realmAPIClient.apiClient = c.apiClient
+	rc.realmAPIClient.callFn = rc.Call
+	rc.realmAPIClient.keyFn = rc.keyFunc
 
-	rc.APIClient = c
-	rc.log = rc.APIClient.log.With().Str("keycloak-realm", realmName).Logger()
+	rc.log = rc.apiClient.log.With().Str("keycloak-realm", realmName).Logger()
 	rc.rn = realmName
 	rc.env = new(RealmEnvConfig)
 
@@ -569,16 +598,16 @@ func (c *APIClient) RealmAPIClient(ctx context.Context, realmName string, mutato
 }
 
 // RealmName returns the realm this client instance is scoped to
-func (rc *RealmAPIClient) RealmName() string {
+func (rc *realmAPIClient) RealmName() string {
 	return rc.rn
 }
 
-func (rc *RealmAPIClient) Environment() *RealmEnvConfig {
+func (rc *realmAPIClient) Environment() *RealmEnvConfig {
 	return rc.env
 }
 
-func (rc *RealmAPIClient) realmsPath(bits ...string) string {
-	return rc.APIClient.realmsPath(rc.rn, bits...)
+func (rc *realmAPIClient) realmsPath(bits ...string) string {
+	return rc.apiClient.realmsPath(rc.rn, bits...)
 }
 
 func (rc *RealmAPIClient) Call(ctx context.Context, tp TokenProvider, method, requestPath string, body interface{}, mutators ...RequestMutator) (*http.Response, error) {
@@ -612,18 +641,18 @@ func (rc *RealmAPIClient) Call(ctx context.Context, tp TokenProvider, method, re
 		}
 		mutators = append(mutators, BearerTokenMutator(token))
 	}
-	return rc.APIClient.Call(ctx, method, requestPath, body, mutators...)
+	return rc.apiClient.callFn(ctx, method, requestPath, body, mutators...)
 }
 
-func (rc *RealmAPIClient) callRealms(ctx context.Context, tp TokenProvider, method, requestPath string, body interface{}, mutators ...RequestMutator) (*http.Response, error) {
-	return rc.Call(ctx, tp, method, rc.realmsPath(requestPath), body, mutators...)
+func (rc *realmAPIClient) callRealms(ctx context.Context, tp TokenProvider, method, requestPath string, body interface{}, mutators ...RequestMutator) (*http.Response, error) {
+	return rc.callFn(ctx, tp, method, rc.realmsPath(requestPath), body, mutators...)
 }
 
-func (rc *RealmAPIClient) RealmIssuerConfiguration(ctx context.Context, mutators ...RequestMutator) (*RealmIssuerConfiguration, error) {
-	return rc.APIClient.RealmIssuerConfiguration(ctx, rc.rn, mutators...)
+func (rc *realmAPIClient) RealmIssuerConfiguration(ctx context.Context, mutators ...RequestMutator) (*RealmIssuerConfiguration, error) {
+	return rc.apiClient.RealmIssuerConfiguration(ctx, rc.rn, mutators...)
 }
 
-func (rc *RealmAPIClient) EncodedPublicKey(ctx context.Context, mutators ...RequestMutator) (string, error) {
+func (rc *realmAPIClient) EncodedPublicKey(ctx context.Context, mutators ...RequestMutator) (string, error) {
 	if conf, err := rc.RealmIssuerConfiguration(ctx, mutators...); err != nil {
 		return "", err
 	} else {
@@ -631,7 +660,7 @@ func (rc *RealmAPIClient) EncodedPublicKey(ctx context.Context, mutators ...Requ
 	}
 }
 
-func (rc *RealmAPIClient) TokenServiceURL(ctx context.Context, mutators ...RequestMutator) (string, error) {
+func (rc *realmAPIClient) TokenServiceURL(ctx context.Context, mutators ...RequestMutator) (string, error) {
 	if conf, err := rc.RealmIssuerConfiguration(ctx, mutators...); err != nil {
 		return "", err
 	} else {
@@ -639,7 +668,7 @@ func (rc *RealmAPIClient) TokenServiceURL(ctx context.Context, mutators ...Reque
 	}
 }
 
-func (rc *RealmAPIClient) AccountServiceURL(ctx context.Context, mutators ...RequestMutator) (string, error) {
+func (rc *realmAPIClient) AccountServiceURL(ctx context.Context, mutators ...RequestMutator) (string, error) {
 	if conf, err := rc.RealmIssuerConfiguration(ctx, mutators...); err != nil {
 		return "", err
 	} else {
@@ -647,7 +676,7 @@ func (rc *RealmAPIClient) AccountServiceURL(ctx context.Context, mutators ...Req
 	}
 }
 
-func (rc *RealmAPIClient) TokensNotBeforeTime(ctx context.Context, mutators ...RequestMutator) (time.Time, error) {
+func (rc *realmAPIClient) TokensNotBeforeTime(ctx context.Context, mutators ...RequestMutator) (time.Time, error) {
 	if conf, err := rc.RealmIssuerConfiguration(ctx, mutators...); err != nil {
 		return time.Time{}, err
 	} else {
@@ -655,21 +684,21 @@ func (rc *RealmAPIClient) TokensNotBeforeTime(ctx context.Context, mutators ...R
 	}
 }
 
-func (rc *RealmAPIClient) OpenIDConfiguration(ctx context.Context, mutators ...RequestMutator) (*OpenIDConfiguration, error) {
-	return rc.APIClient.OpenIDConfiguration(ctx, rc.rn, mutators...)
+func (rc *realmAPIClient) OpenIDConfiguration(ctx context.Context, mutators ...RequestMutator) (*OpenIDConfiguration, error) {
+	return rc.apiClient.OpenIDConfiguration(ctx, rc.rn, mutators...)
 }
 
-func (rc *RealmAPIClient) UMA2Configuration(ctx context.Context, mutators ...RequestMutator) (*UMA2Configuration, error) {
-	return rc.APIClient.UMA2Configuration(ctx, rc.rn, mutators...)
+func (rc *realmAPIClient) UMA2Configuration(ctx context.Context, mutators ...RequestMutator) (*UMA2Configuration, error) {
+	return rc.apiClient.UMA2Configuration(ctx, rc.rn, mutators...)
 }
 
-func (rc *RealmAPIClient) JSONWebKeys(ctx context.Context, mutators ...RequestMutator) (*JSONWebKeySet, error) {
+func (rc *realmAPIClient) JSONWebKeys(ctx context.Context, mutators ...RequestMutator) (*JSONWebKeySet, error) {
 	var (
 		resp *http.Response
 		jwks *JSONWebKeySet
 		err  error
 	)
-	resp, err = rc.Call(ctx, nil, http.MethodGet, rc.env.JSONWebKeysEndpoint(), nil, mutators...)
+	resp, err = rc.callFn(ctx, nil, http.MethodGet, rc.env.JSONWebKeysEndpoint(), nil, mutators...)
 	jwks = new(JSONWebKeySet)
 	if err = handleResponse(resp, http.StatusOK, jwks, err); err != nil {
 		return nil, err
@@ -677,7 +706,7 @@ func (rc *RealmAPIClient) JSONWebKeys(ctx context.Context, mutators ...RequestMu
 	return jwks, nil
 }
 
-func (rc *RealmAPIClient) OpenIDConnectToken(ctx context.Context, tp TokenProvider, req *OpenIDConnectTokenRequest, mutators ...RequestMutator) (*OpenIDConnectToken, error) {
+func (rc *realmAPIClient) OpenIDConnectToken(ctx context.Context, tp TokenProvider, req *OpenIDConnectTokenRequest, mutators ...RequestMutator) (*OpenIDConnectToken, error) {
 	var (
 		body  url.Values
 		resp  *http.Response
@@ -687,7 +716,7 @@ func (rc *RealmAPIClient) OpenIDConnectToken(ctx context.Context, tp TokenProvid
 	if body, err = query.Values(req); err != nil {
 		return nil, fmt.Errorf("error encoding request: %w", err)
 	}
-	resp, err = rc.Call(
+	resp, err = rc.callFn(
 		ctx,
 		tp,
 		http.MethodPost,
@@ -702,7 +731,7 @@ func (rc *RealmAPIClient) OpenIDConnectToken(ctx context.Context, tp TokenProvid
 	return token, nil
 }
 
-func (rc *RealmAPIClient) IntrospectRequestingPartyToken(ctx context.Context, rawRPT string) (*TokenIntrospectionResults, error) {
+func (rc *realmAPIClient) IntrospectRequestingPartyToken(ctx context.Context, rawRPT string) (*TokenIntrospectionResults, error) {
 	var (
 		body    url.Values
 		resp    *http.Response
@@ -712,7 +741,7 @@ func (rc *RealmAPIClient) IntrospectRequestingPartyToken(ctx context.Context, ra
 	body = make(url.Values)
 	body.Add(paramTokenTypeHint, TokenTypeHintRequestingPartyToken)
 	body.Add(paramTypeToken, rawRPT)
-	resp, err = rc.Call(
+	resp, err = rc.callFn(
 		ctx,
 		nil,
 		http.MethodPost,
@@ -728,7 +757,7 @@ func (rc *RealmAPIClient) IntrospectRequestingPartyToken(ctx context.Context, ra
 
 // RequestAccessToken attempts to extract the encoded bearer token from the provided request and parse it into a modeled
 // access token type
-func (rc *RealmAPIClient) RequestAccessToken(ctx context.Context, request *http.Request, claimsType jwt.Claims) (*jwt.Token, error) {
+func (rc *realmAPIClient) RequestAccessToken(ctx context.Context, request *http.Request, claimsType jwt.Claims) (*jwt.Token, error) {
 	if bt, ok := RequestBearerToken(request); ok {
 		return rc.ParseToken(ctx, bt, claimsType)
 	}
@@ -737,7 +766,7 @@ func (rc *RealmAPIClient) RequestAccessToken(ctx context.Context, request *http.
 
 // ParseToken will attempt to parse and validate a raw token into a modeled type.  If this method does not return
 // an error, you can safely assume the provided raw token is safe for use.
-func (rc *RealmAPIClient) ParseToken(ctx context.Context, rawToken string, claimsType jwt.Claims) (*jwt.Token, error) {
+func (rc *realmAPIClient) ParseToken(ctx context.Context, rawToken string, claimsType jwt.Claims) (*jwt.Token, error) {
 	var (
 		jwtToken *jwt.Token
 		err      error
@@ -745,7 +774,7 @@ func (rc *RealmAPIClient) ParseToken(ctx context.Context, rawToken string, claim
 	if claimsType == nil {
 		claimsType = new(StandardClaims)
 	}
-	if jwtToken, err = jwt.ParseWithClaims(rawToken, claimsType, rc.keyFunc(ctx)); err != nil {
+	if jwtToken, err = jwt.ParseWithClaims(rawToken, claimsType, rc.keyFn(ctx)); err != nil {
 		return nil, fmt.Errorf("error parsing raw token into %T: %w", claimsType, err)
 	}
 	return jwtToken, nil
@@ -757,27 +786,36 @@ func (rc *RealmAPIClient) keyFunc(ctx context.Context) jwt.Keyfunc {
 			tp TokenParser
 			ok bool
 		)
-		if tp, ok = rc.APIClient.TokenParser(token.Method.Alg()); !ok {
+		if tp, ok = rc.apiClient.TokenParser(token.Method.Alg()); !ok {
 			return nil, fmt.Errorf("no token parser registered to handle %q", token.Method.Alg())
 		}
 		return tp.Parse(ctx, rc, token)
 	}
 }
 
-// TokenAPIClient
-//
-// This is an extension of the RealmAPIClient that is further scoped by a single TokenProvider, where all requests will
-// have the provided token sent in the Authorization header.
-type TokenAPIClient struct {
-	*RealmAPIClient
-	tp TokenProvider
-}
+type (
+	tokenAPIClient struct {
+		*realmAPIClient
+		tp     TokenProvider
+		callFn apiCallFunc
+	}
 
-func (rc *RealmAPIClient) TokenClient(tp TokenProvider) (*TokenAPIClient, error) {
+	// TokenAPIClient
+	//
+	// This is an extension of the RealmAPIClient that is further scoped by a single TokenProvider, where all requests will
+	// have the provided token sent in the Authorization header.
+	TokenAPIClient struct {
+		*tokenAPIClient
+	}
+)
+
+func (rc *RealmAPIClient) TokenAPIClient(tp TokenProvider) (*TokenAPIClient, error) {
 	if tp == nil {
 		return nil, errors.New("token provider cannot be nil")
 	}
 	tc := new(TokenAPIClient)
+	tc.realmAPIClient = rc.realmAPIClient
+	tc.callFn = tc.Call
 	tc.tp = tp
 	return tc, nil
 }
@@ -790,7 +828,7 @@ func (c *APIClient) TokenAPIClient(ctx context.Context, realmName string, tp Tok
 	if rc, err = c.RealmAPIClient(ctx, realmName, mutators...); err != nil {
 		return nil, err
 	}
-	return rc.TokenClient(tp)
+	return rc.TokenAPIClient(tp)
 }
 
 func (c *APIClient) TokenAPIClientFromProvider(ctx context.Context, tp FixedRealmTokenProvider, mutators ...RequestMutator) (*TokenAPIClient, error) {
@@ -808,22 +846,22 @@ func (c *APIClient) TokenAPIClientForConfidentialClient(ctx context.Context, tpc
 	return c.TokenAPIClientFromProvider(ctx, tp, mutators...)
 }
 
-func (tc *TokenAPIClient) TokenProvider() TokenProvider {
+func (tc *tokenAPIClient) TokenProvider() TokenProvider {
 	return tc.tp
 }
 
 func (tc *TokenAPIClient) Call(ctx context.Context, method, requestPath string, body interface{}, mutators ...RequestMutator) (*http.Response, error) {
-	return tc.RealmAPIClient.Call(ctx, tc.tp, method, requestPath, body, mutators...)
+	return tc.realmAPIClient.callFn(ctx, tc.tp, method, requestPath, body, mutators...)
 }
 
-func (tc *TokenAPIClient) callRealms(ctx context.Context, method, requestPath string, body interface{}, mutators ...RequestMutator) (*http.Response, error) {
-	return tc.Call(ctx, method, tc.realmsPath(requestPath), body, mutators...)
+func (tc *tokenAPIClient) callRealms(ctx context.Context, method, requestPath string, body interface{}, mutators ...RequestMutator) (*http.Response, error) {
+	return tc.callFn(ctx, method, tc.realmsPath(requestPath), body, mutators...)
 }
 
 // ClientEntitlement will attempt to call the pre-uma2 entitlement endpoint to return a Requesting Party Token
 // containing details about what aspects of the provided clientID the token for this request has access to, if any.
 // DEPRECATED: use the newer introspection workflow for  instances newer than 3.4
-func (tc *TokenAPIClient) ClientEntitlement(ctx context.Context, clientID string, claimsType jwt.Claims, mutators ...RequestMutator) (*jwt.Token, error) {
+func (tc *tokenAPIClient) ClientEntitlement(ctx context.Context, clientID string, claimsType jwt.Claims, mutators ...RequestMutator) (*jwt.Token, error) {
 	var (
 		resp *http.Response
 		err  error
@@ -832,14 +870,14 @@ func (tc *TokenAPIClient) ClientEntitlement(ctx context.Context, clientID string
 			RPT string `json:"rpt"`
 		})
 	)
-	resp, err = tc.Call(ctx, http.MethodGet, tc.realmsPath(kcPathPrefixEntitlement, clientID), nil, mutators...)
+	resp, err = tc.callFn(ctx, http.MethodGet, tc.realmsPath(kcPathPrefixEntitlement, clientID), nil, mutators...)
 	if err = handleResponse(resp, http.StatusOK, rptResp, err); err != nil {
 		return nil, err
 	}
 	return tc.ParseToken(ctx, rptResp.RPT, claimsType)
 }
 
-func (tc *TokenAPIClient) OpenIDConnectToken(ctx context.Context, req *OpenIDConnectTokenRequest, mutators ...RequestMutator) (*OpenIDConnectToken, error) {
+func (tc *tokenAPIClient) OpenIDConnectToken(ctx context.Context, req *OpenIDConnectTokenRequest, mutators ...RequestMutator) (*OpenIDConnectToken, error) {
 	var (
 		body  url.Values
 		resp  *http.Response
@@ -849,7 +887,7 @@ func (tc *TokenAPIClient) OpenIDConnectToken(ctx context.Context, req *OpenIDCon
 	if body, err = query.Values(req); err != nil {
 		return nil, fmt.Errorf("error encoding request: %w", err)
 	}
-	resp, err = tc.Call(
+	resp, err = tc.callFn(
 		ctx,
 		http.MethodPost,
 		tc.env.TokenEndpoint(),
