@@ -30,7 +30,7 @@ func usableClientID(t *testing.T) string {
 
 type staticTP string
 
-func (tp staticTP) BearerToken(ctx context.Context, _ *keycloak.RealmAPIClient) (string, error) {
+func (tp staticTP) BearerToken() (string, error) {
 	return string(tp), nil
 }
 

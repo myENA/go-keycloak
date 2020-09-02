@@ -13,12 +13,64 @@ const (
 	DefaultTokenExpirationMargin = 2 * time.Second
 )
 
+var ErrTokenExpired = errors.New("token has expired")
+
+func IsTokenExpiredErr(err error) bool {
+	for err != nil {
+		if errors.Is(err, ErrTokenExpired) {
+			return true
+		}
+		err = errors.Unwrap(err)
+	}
+	return false
+}
+
 // TokenProvider
 //
-// This interface describes any implementation that can provide a bearer token to the given context.
+// A token provider is just that: a provider of tokens.
+//
+// The rules are simple:
+// 	1. If a token value is returned, it will be considered valid and ready for use in requests
+// 		1a. That is to say, no additional checks are done.  It will be used in the Authorization header as-is.
+//	2. If a token has expired, it MUST return an ErrTokenExpired error, or an error wrapping that error
+// 		2a. If the returned error stems from ErrTokenExpired, your provider may optionally implement the
+//			RenewableTokenProvider interface
+//		2b. If any other error is returned, the call will immediately fail
 type TokenProvider interface {
 	// BearerToken must return either a valid bearer token suitable for immediate use or an error
-	BearerToken(context.Context, *RealmAPIClient) (string, error)
+	BearerToken() (string, error)
+}
+
+// RenewableTokenProvider
+//
+// A RenewableTokenProvider is intended for use with long-running processes, most likely a Confidential Client, where
+// the credentials are fairly static or can be fetched from an external source and then used to refresh the bearer
+// token session in Keycloak.
+//
+// Refresh is only required to attempt a refresh if either the token has expired or force is set to true
+type RenewableTokenProvider interface {
+	TokenProvider
+	Renew(ctx context.Context, client *RealmAPIClient, force bool) error
+}
+
+// FixedRealmTokenProvider
+//
+// This interface allows for realm-bearing credential, such as confidential client install documents, to hint which
+// realm they are targeting when constructing clients.
+type FixedRealmTokenProvider interface {
+	TokenProvider
+	TargetRealm() string
+}
+
+type staticTokenProvider string
+
+// NewTokenProvider returns a token provider implementation that returns a fixed token value.
+func NewTokenProvider(bearerToken string) TokenProvider {
+	return staticTokenProvider(bearerToken)
+}
+
+func (st staticTokenProvider) BearerToken() (string, error) {
+	return string(st), nil
 }
 
 // ConfidentialClientTokenProviderConfig must be provided to a new ConfidentialClientTokenProvider upon construction
@@ -44,16 +96,21 @@ type ConfidentialClientTokenProviderConfig struct {
 //	conf := keycloak.ConfidentialClientTokenProviderConfig {
 //		ID: {id document}
 //	}
-//	tp, err := keycloak.NewConfidentialClientTokenProvider(&conf)
-//	if err != nil {
+// 	apiClient, err := keycloak.NewAPIClient(nil)
+//  if err != nil {
 //		panic(err.Error())
+// 	}
+//  ctx, cancel := context.WithTimeout(context.Background(), 2 * time.Second)
+//  defer cancel()
+//  tokenClient, err := apiClient.TokenAPIClientForConfidentialClient(ctx, conf)
+//  if err != nil {
+// 		panic(err.Error())
 //	}
-// 	apiClient, err := keycloak.NewAPIClient(&keycloak.APIClientConfig{TokenProvider: tp})
 //
 // Now, every request called off of the APIClient will be automatically decorated with the correct bearer token,
 // assuming your install document is valid.
 type ConfidentialClientTokenProvider struct {
-	mu sync.Mutex
+	mu sync.RWMutex
 
 	clientID       string
 	clientSecret   string
@@ -107,18 +164,22 @@ func NewConfidentialClientTokenProvider(conf *ConfidentialClientTokenProviderCon
 	return tp, nil
 }
 
+func (tp *ConfidentialClientTokenProvider) TargetRealm() string {
+	return tp.clientRealm
+}
+
 // LastRefreshed returns a unix nano timestamp of the last time this client's bearer token was refreshed.
 func (tp *ConfidentialClientTokenProvider) LastRefreshed() int64 {
-	tp.mu.Lock()
-	defer tp.mu.Unlock()
+	tp.mu.RLock()
+	defer tp.mu.RUnlock()
 	lr := tp.tokenRefreshed
 	return lr
 }
 
 // Expiry returns a unix nano timestamp of when the current token, if defined, expires.
 func (tp *ConfidentialClientTokenProvider) Expiry() int64 {
-	tp.mu.Lock()
-	defer tp.mu.Unlock()
+	tp.mu.RLock()
+	defer tp.mu.RUnlock()
 	e := tp.tokenExpiry
 	return e
 }
@@ -137,7 +198,16 @@ func (tp *ConfidentialClientTokenProvider) Expired() bool {
 	return tp.expired()
 }
 
-func (tp *ConfidentialClientTokenProvider) doRefresh(ctx context.Context, client *RealmAPIClient) (string, error) {
+// RefreshToken provides an external way to manually refresh a bearer token
+func (tp *ConfidentialClientTokenProvider) Renew(ctx context.Context, client *RealmAPIClient, force bool) error {
+	tp.mu.Lock()
+	defer tp.mu.Unlock()
+
+	// check if there is anything to actually do.
+	if !force && !tp.expired() {
+		return nil
+	}
+
 	var (
 		oidc *OpenIDConnectToken
 		err  error
@@ -151,44 +221,28 @@ func (tp *ConfidentialClientTokenProvider) doRefresh(ctx context.Context, client
 
 	// fetch new oidc token
 	if oidc, err = client.OpenIDConnectToken(ctx, nil, req); err != nil {
-		return "", fmt.Errorf("unable to fetch OpenIDConnectToken: %w", err)
+		return fmt.Errorf("unable to fetch OpenIDConnectToken: %w", err)
 	}
 
 	// try to refresh access token.  this has the side-effect of also validating our new token
 	if _, err = client.ParseToken(ctx, oidc.AccessToken, nil); err != nil {
-		return "", fmt.Errorf("unable to refresh access token: %w", err)
+		return fmt.Errorf("unable to refresh access token: %w", err)
 	}
 
 	// if valid, update client
 	tp.token = oidc
 	tp.tokenRefreshed = time.Now().UnixNano()
 	tp.tokenExpiry = time.Now().Add((time.Duration(oidc.ExpiresIn) * time.Second) - tp.expiryMargin).UnixNano()
-	return tp.token.AccessToken, nil
-}
-
-// RefreshToken provides an external way to manually refresh a bearer token
-func (tp *ConfidentialClientTokenProvider) RefreshToken(ctx context.Context, client *RealmAPIClient) (string, error) {
-	tp.mu.Lock()
-	defer tp.mu.Unlock()
-	return tp.doRefresh(ctx, client)
+	return nil
 }
 
 // SetTokenValue will first attempt to use the locally cached last-known-good token.  If not defined or beyond the
 // expiration window, it will call RefreshToken before attempting to set the context token value.
-func (tp *ConfidentialClientTokenProvider) BearerToken(ctx context.Context, client *RealmAPIClient) (string, error) {
-	tp.mu.Lock()
+func (tp *ConfidentialClientTokenProvider) BearerToken() (string, error) {
+	tp.mu.RLock()
 	defer tp.mu.Unlock()
-
-	var (
-		token string
-		err   error
-	)
-
 	if tp.expired() {
-		token, err = tp.doRefresh(ctx, client)
-	} else {
-		token = tp.token.AccessToken
+		return "", ErrTokenExpired
 	}
-
-	return token, err
+	return tp.token.AccessToken, nil
 }

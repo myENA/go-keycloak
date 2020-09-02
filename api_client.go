@@ -577,6 +577,21 @@ func (c *APIClient) TokenAPIClient(ctx context.Context, realmName string, tp Tok
 	return rc.TokenClient(tp)
 }
 
+func (c *APIClient) TokenAPIClientFromProvider(ctx context.Context, tp FixedRealmTokenProvider, mutators ...RequestMutator) (*TokenAPIClient, error) {
+	return c.TokenAPIClient(ctx, tp.TargetRealm(), tp, mutators...)
+}
+
+func (c *APIClient) TokenAPIClientForConfidentialClient(ctx context.Context, tpc *ConfidentialClientTokenProviderConfig, mutators ...RequestMutator) (*TokenAPIClient, error) {
+	var (
+		tp  *ConfidentialClientTokenProvider
+		err error
+	)
+	if tp, err = NewConfidentialClientTokenProvider(tpc); err != nil {
+		return nil, fmt.Errorf("error constructing confidential client token provider: %w", err)
+	}
+	return c.TokenAPIClientFromProvider(ctx, tp, mutators...)
+}
+
 // RealmName returns the realm this client instance is scoped to
 func (rc *RealmAPIClient) RealmName() string {
 	return rc.rn
@@ -596,8 +611,25 @@ func (rc *RealmAPIClient) Call(ctx context.Context, tp TokenProvider, method, re
 			token string
 			err   error
 		)
-		if token, err = tp.BearerToken(ctx, rc); err != nil {
-			return nil, err
+		if token, err = tp.BearerToken(); err != nil {
+			rc.log.Error().Err(err).Msg("Error fetching bearer token for request")
+			if !IsTokenExpiredErr(err) {
+				return nil, err
+			}
+			// check for a renewable provider
+			if rtp, ok := tp.(RenewableTokenProvider); ok {
+				// attempt renewal
+				if err = rtp.Renew(ctx, rc, false); err == nil {
+					// attempt re-fetch
+					token, err = tp.BearerToken()
+				}
+			}
+			// if either the renew or subsequent fetch fails, immediately fail.
+			if err != nil {
+				rc.log.Error().Err(err).Msg("Token fetch errored during renew attempt")
+				return nil, err
+			}
+			rc.log.Debug().Msg("Token successfully renewed")
 		}
 		if mutators == nil {
 			mutators = make([]RequestMutator, 0)
