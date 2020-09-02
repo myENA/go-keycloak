@@ -250,17 +250,12 @@ func (c *apiClient) Do(ctx context.Context, req *APIRequest, mutators ...Request
 		return nil, fmt.Errorf("mutator %d returned error: %w", i, err)
 	}
 
+	c.log.Debug().Object("request", req).Int("mutators", len(mutators)).Msg("Preparing to execute new query...")
+
 	// construct http request
 	if httpRequest, err = req.ToHTTP(ctx, c.issAddr); err != nil {
 		return nil, err
 	}
-
-	c.log.Debug().
-		Str("request-method", httpRequest.Method).
-		Str("request-url", httpRequest.URL.String()).
-		Str("request-body-type", req.BodyType()).
-		Int("request-mutators", len(mutators)).
-		Msg("Preparing to execute new request...")
 
 	// execute
 	httpResponse, err = c.hc.Do(httpRequest)
@@ -577,11 +572,11 @@ func (c *APIClient) RealmAPIClient(ctx context.Context, realmName string, mutato
 		rc = new(RealmAPIClient)
 	)
 	rc.realmAPIClient = new(realmAPIClient)
-	rc.realmAPIClient.apiClient = c.apiClient
-	rc.realmAPIClient.callFn = rc.Call
-	rc.realmAPIClient.keyFn = rc.keyFunc
+	rc.apiClient = c.apiClient
+	rc.callFn = rc.Call
+	rc.keyFn = rc.keyFunc
 
-	rc.log = rc.apiClient.log.With().Str("keycloak-realm", realmName).Logger()
+	rc.log = rc.apiClient.log.With().Str("keycloak_realm", realmName).Logger()
 	rc.rn = realmName
 	rc.env = new(RealmEnvConfig)
 
@@ -814,6 +809,7 @@ func (rc *RealmAPIClient) TokenAPIClient(tp TokenProvider) (*TokenAPIClient, err
 		return nil, errors.New("token provider cannot be nil")
 	}
 	tc := new(TokenAPIClient)
+	tc.tokenAPIClient = new(tokenAPIClient)
 	tc.realmAPIClient = rc.realmAPIClient
 	tc.callFn = tc.Call
 	tc.tp = tp
@@ -891,7 +887,7 @@ func (tc *tokenAPIClient) OpenIDConnectToken(ctx context.Context, req *OpenIDCon
 		ctx,
 		http.MethodPost,
 		tc.env.TokenEndpoint(),
-		strings.NewReader(body.Encode()),
+		body,
 		addMutators(mutators, HeaderMutator(httpHeaderContentType, httpHeaderValueFormURLEncoded, true))...,
 	)
 	token = new(OpenIDConnectToken)

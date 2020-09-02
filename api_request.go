@@ -12,6 +12,8 @@ import (
 	"strconv"
 	"strings"
 	"sync/atomic"
+
+	"github.com/rs/zerolog"
 )
 
 const (
@@ -43,7 +45,8 @@ type APIRequest struct {
 	headers         url.Values
 	cookies         []*http.Cookie
 	body            io.Reader
-	bodyT           string
+	bodyType        string
+	bodyLen         int
 	mpw             *multipart.Writer
 }
 
@@ -184,8 +187,15 @@ func (r *APIRequest) PathParameters() map[string]string {
 }
 
 func (r *APIRequest) SetBody(body interface{}) error {
+	// if provided body is nil, move tf on!
+	if body == nil {
+		r.bodyType = "nil"
+		r.body = nil
+		return nil
+	}
+
 	// set body type string
-	r.bodyT = fmt.Sprintf("%T", body)
+	r.bodyType = fmt.Sprintf("%T", body)
 
 	// test for reader
 	if ar, ok := body.(io.Reader); ok {
@@ -196,22 +206,27 @@ func (r *APIRequest) SetBody(body interface{}) error {
 	// test for raw bytes
 	if b, ok := body.([]byte); ok {
 		r.body = bytes.NewBuffer(b)
+		r.bodyLen = len(b)
 		return nil
 	}
 
 	// test for form data
 	if v, ok := body.(url.Values); ok {
-		r.body = bytes.NewBufferString(v.Encode())
+		enc := v.Encode()
+		r.bodyLen = len(enc)
+		r.body = bytes.NewBufferString(enc)
 		return nil
 	}
 
 	// finally, attempt json marshal
-	if b, err := json.Marshal(body); err != nil {
+	b, err := json.Marshal(body)
+	if err != nil {
 		return err
-	} else {
-		r.body = bytes.NewBuffer(b)
-		return nil
 	}
+
+	r.bodyLen = len(b)
+	r.body = bytes.NewBuffer(b)
+	return nil
 }
 
 func (r *APIRequest) Body() io.Reader {
@@ -219,7 +234,11 @@ func (r *APIRequest) Body() io.Reader {
 }
 
 func (r *APIRequest) BodyType() string {
-	return r.bodyT
+	return r.bodyType
+}
+
+func (r *APIRequest) BodyLen() int {
+	return r.bodyLen
 }
 
 func (r *APIRequest) MultipartForm() {
@@ -322,6 +341,11 @@ func (r *APIRequest) ToHTTP(ctx context.Context, addr string) (*http.Request, er
 		}
 	}
 
+	r.Headers().Add("Accept", headerValueApplicationJSON)
+	if r.bodyLen > 0 {
+		r.Headers().Add("Content-Length", strconv.Itoa(r.bodyLen))
+	}
+
 	if httpRequest, err = http.NewRequestWithContext(ctx, r.method, compiledURL, r.Body()); err != nil {
 		return nil, err
 	}
@@ -334,6 +358,32 @@ func (r *APIRequest) ToHTTP(ctx context.Context, addr string) (*http.Request, er
 
 	return httpRequest, nil
 }
+
+func (r *APIRequest) MarshalZerologObject(ev *zerolog.Event) {
+	ev.Uint64("request_id", r.ID())
+	ev.Str("method", r.Method())
+	ev.Str("uri", r.URI())
+	ev.Str("compiled_uri", r.CompiledURI())
+	ev.Str("body_type", r.BodyType())
+	tmp := make([]string, 0)
+	for k := range r.Headers() {
+		tmp = append(tmp, k)
+	}
+	ev.Strs("header_keys", tmp)
+	tmp = make([]string, 0)
+	for k := range r.QueryParameters() {
+		tmp = append(tmp, k)
+	}
+	ev.Strs("query_keys", tmp)
+	tmp = make([]string, 0)
+	for k := range r.PathParameters() {
+		tmp = append(tmp, k)
+	}
+	ev.Strs("path_keys", tmp)
+	ev.Int("cookies", len(r.Cookies()))
+	ev.Bool("is_multipart", r.mpw != nil)
+}
+
 func addContentDispositionHeader(req *APIRequest, key, filename string) {
 	req.AddHeader(
 		headerKeyContentDisposition,
