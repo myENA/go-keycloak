@@ -105,12 +105,12 @@ func parseAndReturnLocations(resp *http.Response) ([]string, error) {
 	return locations, nil
 }
 
-func compileBaseConfig(provided *APIClientConfig, mutators ...ConfigMutator) *APIClientConfig {
+func compileAPIClientConfig(provided *APIClientConfig, mutators ...ConfigMutator) *APIClientConfig {
 	actual := DefaultAPIClientConfig()
 
 	// ensure we have something to compare with
 	if provided == nil {
-		provided = DefaultAPIClientConfig()
+		provided = new(APIClientConfig)
 	}
 
 	// execute mutators

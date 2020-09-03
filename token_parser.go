@@ -63,7 +63,11 @@ func (tp *X509TokenParser) Parse(ctx context.Context, client *RealmAPIClient, to
 	}
 
 	if pub, ok = tp.pkc.Load(iss, rn, kid); !ok {
-		if pub, err = tp.fetchKeyByID(ctx, client, kid); err != nil {
+		if client.Environment().SupportsUMA2() {
+			if pub, err = tp.fetchKeyByID(ctx, client, kid); err != nil {
+				return nil, err
+			}
+		} else if pub, err = tp.fetchLegacyPK(ctx, client); err != nil {
 			return nil, err
 		}
 		tp.pkc.Store(iss, rn, kid, pub)
@@ -109,6 +113,25 @@ func (tp *X509TokenParser) supports(alg string) bool {
 	return false
 }
 
+func (tp *X509TokenParser) fetchLegacyPK(ctx context.Context, client *RealmAPIClient) (interface{}, error) {
+	var (
+		conf *RealmIssuerConfiguration
+		b    []byte
+		pub  interface{}
+		err  error
+	)
+	if conf, err = client.RealmIssuerConfiguration(ctx); err != nil {
+		return nil, fmt.Errorf("error attempting to fetch public key from legacy realm info endpoint: %w", err)
+	}
+	if b, err = base64.StdEncoding.DecodeString(conf.PublicKey); err != nil {
+		return nil, fmt.Errorf("error decoding public key from legacy realm info endpoint: %w", err)
+	}
+	if pub, err = x509.ParsePKIXPublicKey(b); err != nil {
+		return nil, fmt.Errorf("error parsing public key from legacy realm info endpoint: %w", err)
+	}
+	return pub, nil
+}
+
 func (tp *X509TokenParser) fetchKeyByID(ctx context.Context, client *RealmAPIClient, kid string) (interface{}, error) {
 	var (
 		b    []byte
@@ -124,6 +147,9 @@ func (tp *X509TokenParser) fetchKeyByID(ctx context.Context, client *RealmAPICli
 		return nil, fmt.Errorf("issuer %q realm %q has no key with id %q", client.Environment().IssuerAddress(), client.RealmName(), kid)
 	}
 	// todo: use full chain
+	if len(jwk.X509CertificateChain) == 0 {
+		return nil, errors.New("no certificates returned from json web keys endpoint")
+	}
 	if b, err = base64.StdEncoding.DecodeString(jwk.X509CertificateChain[0]); err != nil {
 		return nil, fmt.Errorf("error decoding certificate %q: %w", kid, err)
 	}

@@ -155,8 +155,8 @@ type (
 		issAddr    string
 		pathPrefix string
 
-		tps   map[string]TokenParser
-		tpsMu sync.RWMutex
+		tokenParsers   map[string]TokenParser
+		tokenParsersMu sync.RWMutex
 
 		mr requestMutatorRunner
 
@@ -185,7 +185,7 @@ func NewAPIClient(config *APIClientConfig, mutators ...ConfigMutator) (*APIClien
 	cl.apiClient = new(apiClient)
 	cl.apiClient.callFn = cl.Call
 
-	cc = compileBaseConfig(config, mutators...)
+	cc = compileAPIClientConfig(config, mutators...)
 
 	if cl.issAddr, err = cc.IssuerProvider.IssuerAddress(); err != nil {
 		return nil, err
@@ -196,7 +196,8 @@ func NewAPIClient(config *APIClientConfig, mutators ...ConfigMutator) (*APIClien
 	}
 
 	cl.pathPrefix = cc.PathPrefix
-	cl.tps = make(map[string]TokenParser)
+	cl.tokenParsers = make(map[string]TokenParser)
+	cl.RegisterTokenParsers(cc.TokenParsers...)
 	cl.hc = cc.HTTPClient
 	cl.log = cc.Logger
 	cl.mr = buildRequestMutatorRunner(cc.Debug)
@@ -222,18 +223,18 @@ func (c *apiClient) IssuerAddress() string {
 }
 
 func (c *apiClient) TokenParser(alg string) (TokenParser, bool) {
-	c.tpsMu.RLock()
-	defer c.tpsMu.RUnlock()
-	tp, ok := c.tps[alg]
+	c.tokenParsersMu.RLock()
+	defer c.tokenParsersMu.RUnlock()
+	tp, ok := c.tokenParsers[alg]
 	return tp, ok
 }
 
 func (c *apiClient) RegisterTokenParsers(tps ...TokenParser) {
-	c.tpsMu.Lock()
-	defer c.tpsMu.Unlock()
+	c.tokenParsersMu.Lock()
+	defer c.tokenParsersMu.Unlock()
 	for _, tp := range tps {
 		for _, alg := range tp.SupportedAlgorithms() {
-			c.tps[alg] = tp
+			c.tokenParsers[alg] = tp
 		}
 	}
 }
@@ -831,19 +832,40 @@ func (c *APIClient) TokenAPIClient(ctx context.Context, realmName string, tp Tok
 	return rc.TokenAPIClient(tp)
 }
 
-func (c *APIClient) TokenAPIClientFromProvider(ctx context.Context, tp FixedRealmTokenProvider, mutators ...RequestMutator) (*TokenAPIClient, error) {
-	return c.TokenAPIClient(ctx, tp.TargetRealm(), tp, mutators...)
+func (c *APIClient) TokenAPIClientWithProvider(ctx context.Context, tp FullStateTokenProvider, mutators ...RequestMutator) (*TokenAPIClient, error) {
+	var (
+		rc  *RealmAPIClient
+		err error
+	)
+	if rc, err = c.RealmAPIClient(ctx, tp.TargetRealm(), mutators...); err != nil {
+		return nil, err
+	}
+	return rc.TokenAPIClient(tp)
 }
 
-func (c *APIClient) TokenAPIClientForConfidentialClient(ctx context.Context, tpc *ConfidentialClientTokenProviderConfig, mutators ...RequestMutator) (*TokenAPIClient, error) {
+func NewTokenAPIClientWithProvider(ctx context.Context, conf *APIClientConfig, tp FullStateTokenProvider, mutators ...RequestMutator) (*TokenAPIClient, error) {
+	var (
+		cl  *APIClient
+		err error
+	)
+
+	if cl, err = NewAPIClient(conf, func(config *APIClientConfig) {
+		config.IssuerProvider = tp
+	}); err != nil {
+		return nil, err
+	}
+	return cl.TokenAPIClientWithProvider(ctx, tp, mutators...)
+}
+
+func NewTokenAPIClientForConfidentialClient(ctx context.Context, conf *APIClientConfig, tpConf *ConfidentialClientTokenProviderConfig, mutators ...RequestMutator) (*TokenAPIClient, error) {
 	var (
 		tp  *ConfidentialClientTokenProvider
 		err error
 	)
-	if tp, err = NewConfidentialClientTokenProvider(tpc); err != nil {
-		return nil, fmt.Errorf("error constructing confidential client token provider: %w", err)
+	if tp, err = NewConfidentialClientTokenProvider(tpConf); err != nil {
+		return nil, err
 	}
-	return c.TokenAPIClientFromProvider(ctx, tp, mutators...)
+	return NewTokenAPIClientWithProvider(ctx, conf, tp, mutators...)
 }
 
 func (tc *tokenAPIClient) TokenProvider() TokenProvider {

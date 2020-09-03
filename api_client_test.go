@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/myENA/go-keycloak/v2"
+	"github.com/rs/zerolog"
 )
 
 const (
@@ -22,6 +23,11 @@ type testConfig struct {
 	Realm       string `json:"realm"`
 	ClientID    string `json:"client_id"`
 	BearerToken string `json:"bearer_token"`
+	Logging     struct {
+		Enabled bool          `json:"enabled"`
+		Level   zerolog.Level `json:"level"`
+		Out     string        `json:"out"`
+	} `json:"logging"`
 }
 
 func getConfig(t *testing.T) *testConfig {
@@ -71,6 +77,10 @@ func getConfig(t *testing.T) *testConfig {
 		return nil
 	}
 
+	if conf.Logging.Out == "" {
+		conf.Logging.Out = "stdout"
+	}
+
 	return conf
 }
 
@@ -107,6 +117,16 @@ func newClient(t *testing.T, conf *testConfig, mutators ...keycloak.ConfigMutato
 		mutators,
 		func(config *keycloak.APIClientConfig) {
 			config.IssuerProvider = ip
+			if conf.Logging.Enabled {
+				lw := zerolog.NewConsoleWriter(func(w *zerolog.ConsoleWriter) {
+					if conf.Logging.Out == "stdout" {
+						w.Out = os.Stdout
+					} else {
+						w.Out = os.Stderr
+					}
+				})
+				config.Logger = zerolog.New(lw).Level(conf.Logging.Level).With().Timestamp().Logger()
+			}
 		},
 	)
 
@@ -254,22 +274,11 @@ func TestRPT(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
-	if cl.Environment().SupportsUMA2() {
-		req := keycloak.NewOpenIDConnectTokenRequest(keycloak.GrantTypeUMA2Ticket)
-		req.Audience = conf.ClientID
-		_, err := cl.OpenIDConnectToken(ctx, req)
-		if err != nil {
-			t.Logf("Error fetching RPT: %s", err)
-			t.FailNow()
-			return
-		}
-	} else {
-		claims := new(keycloak.StandardClaims)
-		_, err := cl.ClientEntitlement(ctx, conf.ClientID, claims)
-		if err != nil {
-			t.Logf("Error fetching RPT: %s", err)
-			t.FailNow()
-			return
-		}
+	claims := new(keycloak.StandardClaims)
+	_, err := cl.RequestingPartyToken(ctx, conf.ClientID, claims)
+	if err != nil {
+		t.Logf("Error fetching RPT: %v", err)
+		t.FailNow()
+		return
 	}
 }

@@ -53,12 +53,11 @@ type RenewableTokenProvider interface {
 	Renew(ctx context.Context, client *RealmAPIClient, force bool) error
 }
 
-// FixedRealmTokenProvider
-//
-// This interface allows for realm-bearing credential, such as confidential client install documents, to hint which
-// realm they are targeting when constructing clients.
-type FixedRealmTokenProvider interface {
+// FullStateTokenProvider is intended for user with a confidential client install document that contains the target
+// issuer address and realm name.  It allows for an easier path to a TokenAPIClient.
+type FullStateTokenProvider interface {
 	TokenProvider
+	IssuerProvider
 	TargetRealm() string
 }
 
@@ -96,22 +95,19 @@ type ConfidentialClientTokenProviderConfig struct {
 //	conf := keycloak.ConfidentialClientTokenProviderConfig {
 //		ID: {id document}
 //	}
-// 	apiClient, err := keycloak.NewAPIClient(nil)
-//  if err != nil {
-//		panic(err.Error())
-// 	}
 //  ctx, cancel := context.WithTimeout(context.Background(), 2 * time.Second)
 //  defer cancel()
-//  tokenClient, err := apiClient.TokenAPIClientForConfidentialClient(ctx, conf)
+//  tokenClient, err := NewTokenAPIClientForConfidentialClient(ctx, nil, conf)
 //  if err != nil {
 // 		panic(err.Error())
 //	}
 //
-// Now, every request called off of the APIClient will be automatically decorated with the correct bearer token,
-// assuming your install document is valid.
+// The above call returns to you a fully constructed TokenAPIClient that will utilize your provided install document
+// for requests that require authentication
 type ConfidentialClientTokenProvider struct {
 	mu sync.RWMutex
 
+	issuerAddr     string
 	clientID       string
 	clientSecret   string
 	expiryMargin   time.Duration
@@ -156,12 +152,17 @@ func NewConfidentialClientTokenProvider(conf *ConfidentialClientTokenProviderCon
 		expiryMargin = conf.ExpiryMargin
 	}
 
+	tp.issuerAddr = id.AuthServerURL
 	tp.clientID = id.Resource
 	tp.clientRealm = id.Realm
 	tp.clientSecret = secretStr
 	tp.expiryMargin = expiryMargin
 
 	return tp, nil
+}
+
+func (tp *ConfidentialClientTokenProvider) IssuerAddress() (string, error) {
+	return tp.issuerAddr, nil
 }
 
 func (tp *ConfidentialClientTokenProvider) TargetRealm() string {
