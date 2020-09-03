@@ -19,11 +19,12 @@ const (
 )
 
 type testConfig struct {
-	Issuer      string `json:"issuer"`
-	Realm       string `json:"realm"`
-	ClientID    string `json:"client_id"`
-	BearerToken string `json:"bearer_token"`
-	Logging     struct {
+	Issuer          string                    `json:"issuer"`
+	Realm           string                    `json:"realm"`
+	ClientID        string                    `json:"client_id"`
+	BearerToken     string                    `json:"bearer_token"`
+	InstallDocument *keycloak.InstallDocument `json:"install_document"`
+	Logging         struct {
 		Enabled bool          `json:"enabled"`
 		Level   zerolog.Level `json:"level"`
 		Out     string        `json:"out"`
@@ -101,22 +102,16 @@ func newStaticTP(token, realm string) staticTP {
 	return staticTP{token, realm}
 }
 
-func newClient(t *testing.T, conf *testConfig, mutators ...keycloak.ConfigMutator) *keycloak.APIClient {
-	t.Helper()
-	var (
-		ip  keycloak.IssuerProvider
-		err error
-	)
-
-	ip = keycloak.NewStaticIssuerProvider(conf.Issuer)
-
+func buildClientConfigMutators(conf *testConfig, mutators ...keycloak.ConfigMutator) []keycloak.ConfigMutator {
 	if mutators == nil {
 		mutators = make([]keycloak.ConfigMutator, 0)
 	}
+	mutators = append(mutators, func(config *keycloak.APIClientConfig) {
+		config.AuthServerURLProvider = keycloak.NewAuthServerURLProvider(conf.Issuer)
+	})
 	mutators = append(
 		mutators,
 		func(config *keycloak.APIClientConfig) {
-			config.IssuerProvider = ip
 			if conf.Logging.Enabled {
 				lw := zerolog.NewConsoleWriter(func(w *zerolog.ConsoleWriter) {
 					if conf.Logging.Out == "stdout" {
@@ -129,6 +124,15 @@ func newClient(t *testing.T, conf *testConfig, mutators ...keycloak.ConfigMutato
 			}
 		},
 	)
+
+	return mutators
+}
+
+func newClient(t *testing.T, conf *testConfig, mutators ...keycloak.ConfigMutator) *keycloak.APIClient {
+	t.Helper()
+	var err error
+
+	mutators = buildClientConfigMutators(conf, mutators...)
 
 	cl, err := keycloak.NewAPIClient(nil, mutators...)
 	if err != nil {
@@ -168,7 +172,7 @@ func newRealmClient(t *testing.T, conf *testConfig, mutators ...keycloak.ConfigM
 	return rc
 }
 
-func newTokenClient(t *testing.T, conf *testConfig, mutators ...keycloak.ConfigMutator) *keycloak.TokenAPIClient {
+func newBearerTokenClient(t *testing.T, conf *testConfig, mutators ...keycloak.ConfigMutator) *keycloak.TokenAPIClient {
 	var (
 		rc  *keycloak.RealmAPIClient
 		tc  *keycloak.TokenAPIClient
@@ -187,6 +191,34 @@ func newTokenClient(t *testing.T, conf *testConfig, mutators ...keycloak.ConfigM
 
 	if tc, err = rc.TokenAPIClient(newStaticTP(conf.BearerToken, rc.RealmName())); err != nil {
 		t.Logf("Error constructing token client: %v", err)
+		t.FailNow()
+		return nil
+	}
+
+	return tc
+}
+
+func newConfidentialClientTokenClient(t *testing.T, conf *testConfig, mutators ...keycloak.ConfigMutator) *keycloak.TokenAPIClient {
+	var (
+		tc  *keycloak.TokenAPIClient
+		err error
+
+		tpc = new(keycloak.ConfidentialClientTokenProviderConfig)
+	)
+
+	tpc.ID = conf.InstallDocument
+	mutators = buildClientConfigMutators(conf, mutators...)
+
+	if conf.InstallDocument == nil {
+		t.Logf("install_document key is empty in config")
+		t.FailNow()
+		return nil
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	if tc, err = keycloak.NewTokenAPIClientForConfidentialClient(ctx, keycloak.CompileAPIClientConfig(nil, mutators...), tpc); err != nil {
+		t.Logf("error constructiong token api client: %v", err)
 		t.FailNow()
 		return nil
 	}
@@ -246,8 +278,7 @@ func TestWellKnownConfigs(t *testing.T) {
 				t.Logf("Error fetching UMA2 config: %s", err)
 				t.Fail()
 			} else {
-				t.Skipped()
-				t.Log("It appears your Keycloak instance does not support uma2")
+				t.Skip("It appears your Keycloak instance does not support uma2")
 			}
 		} else {
 			b, _ := json.Marshal(uma2)
@@ -266,7 +297,7 @@ func TestRPT(t *testing.T) {
 		return
 	}
 
-	cl := newTokenClient(t, conf)
+	cl := newBearerTokenClient(t, conf)
 	if cl == nil || t.Failed() {
 		return
 	}
@@ -287,4 +318,36 @@ func TestRPT(t *testing.T) {
 		t.FailNow()
 		return
 	}
+}
+
+func TestConfidentialClientTokenProvider(t *testing.T) {
+	t.Parallel()
+	conf := getConfig(t)
+
+	if conf.InstallDocument == nil {
+		if !t.Failed() {
+			t.Skip("No install document configured, cannot test confidential client token provider")
+		}
+		return
+	}
+
+	tc := newConfidentialClientTokenClient(t, conf)
+	if tc == nil {
+		return
+	}
+
+	t.Run("get-token", func(t *testing.T) {
+		if _, err := tc.TokenProvider().BearerToken(); err != nil {
+			t.Logf("Failed to fetch bearer token from provider: %v", err)
+			t.FailNow()
+		}
+	})
+
+	t.Run("refresh-token", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		if err := tc.TokenProvider().(keycloak.RenewableTokenProvider).Renew(ctx, tc, false); err != nil {
+
+		}
+	})
 }

@@ -8,7 +8,6 @@ import (
 	"io"
 	"io/ioutil"
 	"net/http"
-	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -27,29 +26,6 @@ func RequestBearerToken(request *http.Request) (string, bool) {
 		}
 	}
 	return "", false
-}
-
-func ParseAddr(addr string, insecure bool) (string, error) {
-	var (
-		purl *url.URL
-		err  error
-	)
-	addr = strings.TrimSpace(addr)
-	if addr == "" {
-		return "", errors.New("addr is empty")
-	}
-	if !strings.HasPrefix(strings.ToLower(addr), "http") {
-		clean := strings.Trim(addr, ":/")
-		if insecure {
-			addr = fmt.Sprintf("http://%s", clean)
-		} else {
-			addr = fmt.Sprintf("https://%s", clean)
-		}
-	}
-	if purl, err = url.Parse(addr); err != nil {
-		return "", err
-	}
-	return fmt.Sprintf(addressFormat, purl.Scheme, purl.Host), nil
 }
 
 func defaultZerologWriter(w *zerolog.ConsoleWriter) {
@@ -105,7 +81,7 @@ func parseAndReturnLocations(resp *http.Response) ([]string, error) {
 	return locations, nil
 }
 
-func compileAPIClientConfig(provided *APIClientConfig, mutators ...ConfigMutator) *APIClientConfig {
+func CompileAPIClientConfig(provided *APIClientConfig, mutators ...ConfigMutator) *APIClientConfig {
 	actual := DefaultAPIClientConfig()
 
 	// ensure we have something to compare with
@@ -120,14 +96,9 @@ func compileAPIClientConfig(provided *APIClientConfig, mutators ...ConfigMutator
 
 	// to ensure we have something resembling a usable config...
 
-	// issuer stuff
-	if provided.IssuerProvider != nil {
-		actual.IssuerProvider = provided.IssuerProvider
-	}
-
-	// url paths
-	if provided.PathPrefix != "" {
-		actual.PathPrefix = provided.PathPrefix
+	// auth server url stuff
+	if provided.AuthServerURLProvider != nil {
+		actual.AuthServerURLProvider = provided.AuthServerURLProvider
 	}
 
 	if len(provided.TokenParsers) > 0 {

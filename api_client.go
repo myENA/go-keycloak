@@ -54,8 +54,8 @@ const (
 	paramTypeToken     = "token"
 
 	// url structures
-	addressFormat = "%s://%s/"
-	apiPathFormat = "%s/%s"
+	authServerURLFormat = "%s://%s/%s"
+	apiPathFormat       = "%s/%s"
 
 	// ks api paths
 	kcURLPathRealmsFormat      = "%s/realms/%s/%s"
@@ -95,27 +95,22 @@ type DebugConfig struct {
 //
 // This is the configuration container for a APIClient.  See individual comments on fields for more details.
 type APIClientConfig struct {
-	// IssuerProvider [optional]
+	// AuthServerURLProvider [required]
 	//
-	// The IssuerProvider is called ONCE during client construction to determine the address of the  instance
+	// The AuthServerURLProvider is called ONCE during client construction to determine the address of the  instance
 	// to connect to.  It is never called again, and no reference to it is kept in the client.
 	//
 	// If left blank, a provider will be created that will attempt to fetch the issuer address from Consul via the kv
 	// path defined by the DefaultTokenIssuer constant in this package.
 	//
-	// See "provider_issuer.go" for available providers.
-	IssuerProvider IssuerProvider
+	// See "provider_auth_server_url.go" for available providers.
+	AuthServerURLProvider AuthServerURLProvider
 
 	// TokenParsers [required]
 	//
 	// List of token parser implementations to support with this client.  These will be used for all realm clients
 	// created by this client instance
 	TokenParsers []TokenParser
-
-	// PathPrefix [optional]
-	//
-	// URL Path prefix.  Defaults to value of DefaultPathPrefix.
-	PathPrefix string
 
 	// HTTPClient [optional]
 	//
@@ -136,12 +131,11 @@ type APIClientConfig struct {
 
 func DefaultAPIClientConfig() *APIClientConfig {
 	c := APIClientConfig{
-		PathPrefix:     DefaultPathPrefix,
-		IssuerProvider: defaultIssuerProvider(),
-		TokenParsers:   []TokenParser{NewX509TokenParser(NewPublicKeyCache())},
-		HTTPClient:     cleanhttp.DefaultClient(),
-		Logger:         DefaultZerologLogger(),
-		Debug:          new(DebugConfig),
+		AuthServerURLProvider: defaultIssuerProvider(),
+		TokenParsers:          []TokenParser{NewX509TokenParser(NewPublicKeyCache())},
+		HTTPClient:            cleanhttp.DefaultClient(),
+		Logger:                DefaultZerologLogger(),
+		Debug:                 new(DebugConfig),
 	}
 	return &c
 }
@@ -152,8 +146,7 @@ type (
 	apiClient struct {
 		log zerolog.Logger
 
-		issAddr    string
-		pathPrefix string
+		authServerUrL string
 
 		tokenParsers   map[string]TokenParser
 		tokenParsersMu sync.RWMutex
@@ -185,17 +178,18 @@ func NewAPIClient(config *APIClientConfig, mutators ...ConfigMutator) (*APIClien
 	cl.apiClient = new(apiClient)
 	cl.apiClient.callFn = cl.Call
 
-	cc = compileAPIClientConfig(config, mutators...)
+	cc = CompileAPIClientConfig(config, mutators...)
 
-	if cl.issAddr, err = cc.IssuerProvider.IssuerAddress(); err != nil {
+	// set and cleanup auth server url
+	if cl.authServerUrL, err = cc.AuthServerURLProvider.AuthServerURL(); err != nil {
 		return nil, err
 	}
+	cl.authServerUrL = strings.TrimRight(cl.authServerUrL, "/")
 
 	if len(cc.TokenParsers) == 0 {
 		return nil, errors.New("must provide at least one token parser")
 	}
 
-	cl.pathPrefix = cc.PathPrefix
 	cl.tokenParsers = make(map[string]TokenParser)
 	cl.RegisterTokenParsers(cc.TokenParsers...)
 	cl.hc = cc.HTTPClient
@@ -209,17 +203,13 @@ func NewAPIClient(config *APIClientConfig, mutators ...ConfigMutator) (*APIClien
 // instance this client will be executing calls against
 func NewAPIClientWithIssuerAddress(issuerAddress string, mutators ...ConfigMutator) (*APIClient, error) {
 	conf := DefaultAPIClientConfig()
-	conf.IssuerProvider = NewStaticIssuerProvider(issuerAddress)
+	conf.AuthServerURLProvider = NewAuthServerURLProvider(issuerAddress)
 	return NewAPIClient(conf, mutators...)
-}
-
-func (c *apiClient) PathPrefix() string {
-	return c.pathPrefix
 }
 
 // IssuerAddress will return the address of the issuer this client is targeting
 func (c *apiClient) IssuerAddress() string {
-	return c.issAddr
+	return c.authServerUrL
 }
 
 func (c *apiClient) TokenParser(alg string) (TokenParser, bool) {
@@ -254,7 +244,7 @@ func (c *apiClient) Do(ctx context.Context, req *APIRequest, mutators ...Request
 	c.log.Debug().Object("request", req).Int("mutators", len(mutators)).Msg("Preparing to execute new query...")
 
 	// construct http request
-	if httpRequest, err = req.ToHTTP(ctx, c.issAddr); err != nil {
+	if httpRequest, err = req.ToHTTP(ctx, c.authServerUrL); err != nil {
 		return nil, err
 	}
 
@@ -328,14 +318,6 @@ func (c *apiClient) UMA2Configuration(ctx context.Context, realmName string, mut
 		return nil, err
 	}
 	return uma2, nil
-}
-
-// basePath builds a request path under the configured prefix... path
-func (c *apiClient) basePath(bits ...string) string {
-	if len(bits) == 0 {
-		return c.pathPrefix
-	}
-	return fmt.Sprintf(apiPathFormat, c.pathPrefix, path.Join(bits...))
 }
 
 // realmsPath builds a request path under the /realms/{realm}/... path
@@ -850,7 +832,7 @@ func NewTokenAPIClientWithProvider(ctx context.Context, conf *APIClientConfig, t
 	)
 
 	if cl, err = NewAPIClient(conf, func(config *APIClientConfig) {
-		config.IssuerProvider = tp
+		config.AuthServerURLProvider = tp
 	}); err != nil {
 		return nil, err
 	}

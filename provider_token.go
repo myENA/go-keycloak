@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"sync"
 	"time"
+
+	"github.com/dgrijalva/jwt-go"
 )
 
 const (
@@ -41,6 +43,12 @@ type TokenProvider interface {
 	BearerToken() (string, error)
 }
 
+// RenewableTokenClient describes any client that is suitable for being used with a RenewableTokenProvider
+type RenewableTokenClient interface {
+	OpenIDConnectToken(context.Context, TokenProvider, *OpenIDConnectTokenRequest, ...RequestMutator) (*OpenIDConnectToken, error)
+	ParseToken(context.Context, string, jwt.Claims) (*jwt.Token, error)
+}
+
 // RenewableTokenProvider
 //
 // A RenewableTokenProvider is intended for use with long-running processes, most likely a Confidential Client, where
@@ -50,14 +58,14 @@ type TokenProvider interface {
 // Refresh is only required to attempt a refresh if either the token has expired or force is set to true
 type RenewableTokenProvider interface {
 	TokenProvider
-	Renew(ctx context.Context, client *RealmAPIClient, force bool) error
+	Renew(ctx context.Context, client RenewableTokenClient, force bool) error
 }
 
 // FullStateTokenProvider is intended for user with a confidential client install document that contains the target
 // issuer address and realm name.  It allows for an easier path to a TokenAPIClient.
 type FullStateTokenProvider interface {
 	TokenProvider
-	IssuerProvider
+	AuthServerURLProvider
 	TargetRealm() string
 }
 
@@ -161,7 +169,7 @@ func NewConfidentialClientTokenProvider(conf *ConfidentialClientTokenProviderCon
 	return tp, nil
 }
 
-func (tp *ConfidentialClientTokenProvider) IssuerAddress() (string, error) {
+func (tp *ConfidentialClientTokenProvider) AuthServerURL() (string, error) {
 	return tp.issuerAddr, nil
 }
 
@@ -200,7 +208,7 @@ func (tp *ConfidentialClientTokenProvider) Expired() bool {
 }
 
 // RefreshToken provides an external way to manually refresh a bearer token
-func (tp *ConfidentialClientTokenProvider) Renew(ctx context.Context, client *RealmAPIClient, force bool) error {
+func (tp *ConfidentialClientTokenProvider) Renew(ctx context.Context, client RenewableTokenClient, force bool) error {
 	tp.mu.Lock()
 	defer tp.mu.Unlock()
 
