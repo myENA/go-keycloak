@@ -275,9 +275,15 @@ func TestRPT(t *testing.T) {
 	defer cancel()
 
 	claims := new(keycloak.StandardClaims)
-	_, err := cl.RequestingPartyToken(ctx, conf.ClientID, claims)
+	tok, err := cl.RequestingPartyToken(ctx, conf.ClientID, claims)
 	if err != nil {
 		t.Logf("Error fetching RPT: %v", err)
+		t.FailNow()
+		return
+	}
+
+	if !tok.Valid {
+		t.Logf("RPT token failed validation: %v", err)
 		t.FailNow()
 		return
 	}
