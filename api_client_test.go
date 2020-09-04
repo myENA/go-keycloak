@@ -94,7 +94,7 @@ func (tp staticTP) TargetRealm() string {
 	return tp.realm
 }
 
-func (tp staticTP) BearerToken() (string, error) {
+func (tp staticTP) Current() (string, error) {
 	return tp.token, nil
 }
 
@@ -337,7 +337,7 @@ func TestConfidentialClientTokenProvider(t *testing.T) {
 	}
 
 	t.Run("get-token", func(t *testing.T) {
-		if _, err := tc.TokenProvider().BearerToken(); err != nil {
+		if _, err := tc.TokenProvider().Current(); err != nil {
 			t.Logf("Failed to fetch bearer token from provider: %v", err)
 			t.FailNow()
 		}
@@ -346,7 +346,7 @@ func TestConfidentialClientTokenProvider(t *testing.T) {
 	t.Run("refresh-token", func(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
-		if err := tc.TokenProvider().(keycloak.RenewableTokenProvider).Renew(ctx, tc, false); err != nil {
+		if err := tc.TokenProvider().(keycloak.RenewableBearerTokenProvider).Renew(ctx, tc, false); err != nil {
 
 		}
 	})

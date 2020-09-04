@@ -32,7 +32,7 @@ func (ps *PermissionsService) Evaluate(ctx context.Context, req *OpenIDConnectTo
 	if body, err = query.Values(req); err != nil {
 		return nil, fmt.Errorf("error encoding request: %w", err)
 	}
-	body.Set(paramResponseMode, ResponseModePermissions)
+	body.Set(paramResponseMode, UMA2ResponseModePermissions)
 	resp, err = ps.tc.callFn(
 		ctx,
 		http.MethodPost,
@@ -61,7 +61,7 @@ func (ps *PermissionsService) Decide(ctx context.Context, req *OpenIDConnectToke
 	if body, err = query.Values(req); err != nil {
 		return false, fmt.Errorf("error encoding request: %w", err)
 	}
-	body.Set(paramResponseMode, ResponseModeDecision)
+	body.Set(paramResponseMode, UMA2ResponseModeDecision)
 	resp, err = ps.tc.callRealms(
 		ctx,
 		http.MethodPost,

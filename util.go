@@ -8,11 +8,7 @@ import (
 	"io"
 	"io/ioutil"
 	"net/http"
-	"os"
 	"strings"
-	"time"
-
-	"github.com/rs/zerolog"
 )
 
 // RequestBearerToken attempts to extract the encoded "Bearer" token from the provided request's "Authorization" header
@@ -26,40 +22,6 @@ func RequestBearerToken(request *http.Request) (string, bool) {
 		}
 	}
 	return "", false
-}
-
-func defaultZerologWriter(w *zerolog.ConsoleWriter) {
-	w.NoColor = false
-	w.TimeFormat = time.Stamp
-	w.Out = os.Stdout
-}
-
-// DefaultZerologLogger returns a default logger to be used with this package.  No guarantee is made of consistency
-// between releases.
-func DefaultZerologLogger() zerolog.Logger {
-	return zerolog.New(zerolog.NewConsoleWriter(defaultZerologWriter)).
-		With().
-		Str("component", "keycloak-client").
-		Timestamp().
-		Logger()
-}
-
-// buildPKCacheKey creates the public key cache entry keys.
-func buildPKCacheKey(issuerHost, realm, keyID string) string {
-	return fmt.Sprintf(pkKeyFormat, issuerHost, realm, keyID)
-}
-
-// parsePKCacheKey splits a cache key into issuer : realm
-func parsePKCacheKey(key interface{}) (string, string, string) {
-	str, ok := key.(string)
-	if !ok {
-		return "", "", ""
-	}
-	s := strings.SplitN("\n", str, 4)
-	if len(s) != 4 || s[0] != pkKeyPrefix {
-		return "", "", ""
-	}
-	return s[1], s[2], s[3]
 }
 
 func parseResponseLocations(resp *http.Response) ([]string, error) {
@@ -109,9 +71,6 @@ func CompileAPIClientConfig(provided *APIClientConfig, mutators ...ConfigMutator
 	if provided.HTTPClient != nil {
 		actual.HTTPClient = provided.HTTPClient
 	}
-
-	// logging
-	actual.Logger = provided.Logger
 
 	// debug options
 	actual.Debug = provided.Debug
@@ -189,4 +148,12 @@ func addMutators(root []RequestMutator, m ...RequestMutator) []RequestMutator {
 		root = make([]RequestMutator, 0)
 	}
 	return append(root, m...)
+}
+
+func ensureEnvVar(varName string) string {
+	v := strings.TrimSpace(varName)
+	if v == "" {
+		panic(fmt.Sprintf("environment variable %q is empty or undefined", varName))
+	}
+	return v
 }

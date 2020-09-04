@@ -12,8 +12,6 @@ import (
 	"strconv"
 	"strings"
 	"sync/atomic"
-
-	"github.com/rs/zerolog"
 )
 
 const (
@@ -50,11 +48,11 @@ type APIRequest struct {
 	mpw             *multipart.Writer
 }
 
-func NewAPIRequest(method, uri string) *APIRequest {
+func NewAPIRequest(method, requestURL string) *APIRequest {
 	r := &APIRequest{
 		id:              atomic.AddUint64(&apiRequestID, 1),
 		method:          method,
-		uri:             uri,
+		uri:             requestURL,
 		queryParameters: make(map[string][]string),
 		pathParameters:  make(map[string]string),
 		headers:         make(url.Values),
@@ -325,7 +323,7 @@ func (r *APIRequest) CompiledURI() string {
 }
 
 // ToHTTP will attempt to construct an executable http.request
-func (r *APIRequest) ToHTTP(ctx context.Context, addr string) (*http.Request, error) {
+func (r *APIRequest) ToHTTP(ctx context.Context) (*http.Request, error) {
 	var (
 		httpRequest *http.Request
 		err         error
@@ -333,19 +331,12 @@ func (r *APIRequest) ToHTTP(ctx context.Context, addr string) (*http.Request, er
 		compiledURL = r.CompiledURI()
 	)
 
-	// todo: not the biggest fan of this, redesign call structure.
-	if !strings.HasPrefix(compiledURL, addr) {
-		compiledURL = fmt.Sprintf(apiRequestURLFormat, addr, compiledURL)
-	}
-
 	if r.mpw != nil {
 		r.SetHeader(headerKeyContentType, r.mpw.FormDataContentType())
 		if err = r.mpw.Close(); err != nil {
 			return nil, fmt.Errorf("error closing multipart writer: %w", err)
 		}
 	}
-
-	r.Headers().Add("Accept", headerValueApplicationJSON)
 
 	if httpRequest, err = http.NewRequestWithContext(ctx, r.method, compiledURL, r.Body()); err != nil {
 		return nil, err
@@ -360,30 +351,31 @@ func (r *APIRequest) ToHTTP(ctx context.Context, addr string) (*http.Request, er
 	return httpRequest, nil
 }
 
-func (r *APIRequest) MarshalZerologObject(ev *zerolog.Event) {
-	ev.Uint64("request_id", r.ID())
-	ev.Str("method", r.Method())
-	ev.Str("uri", r.URI())
-	ev.Str("compiled_uri", r.CompiledURI())
-	ev.Str("body_type", r.BodyType())
-	tmp := make([]string, 0)
-	for k := range r.Headers() {
-		tmp = append(tmp, k)
-	}
-	ev.Strs("header_keys", tmp)
-	tmp = make([]string, 0)
-	for k := range r.QueryParameters() {
-		tmp = append(tmp, k)
-	}
-	ev.Strs("query_keys", tmp)
-	tmp = make([]string, 0)
-	for k := range r.PathParameters() {
-		tmp = append(tmp, k)
-	}
-	ev.Strs("path_keys", tmp)
-	ev.Int("cookies", len(r.Cookies()))
-	ev.Bool("is_multipart", r.mpw != nil)
-}
+//
+//func (r *APIRequest) MarshalZerologObject(ev *zerolog.Event) {
+//	ev.Uint64("request_id", r.ID())
+//	ev.Str("method", r.Method())
+//	ev.Str("uri", r.URI())
+//	ev.Str("compiled_uri", r.CompiledURI())
+//	ev.Str("body_type", r.BodyType())
+//	tmp := make([]string, 0)
+//	for k := range r.Headers() {
+//		tmp = append(tmp, k)
+//	}
+//	ev.Strs("header_keys", tmp)
+//	tmp = make([]string, 0)
+//	for k := range r.QueryParameters() {
+//		tmp = append(tmp, k)
+//	}
+//	ev.Strs("query_keys", tmp)
+//	tmp = make([]string, 0)
+//	for k := range r.PathParameters() {
+//		tmp = append(tmp, k)
+//	}
+//	ev.Strs("path_keys", tmp)
+//	ev.Int("cookies", len(r.Cookies()))
+//	ev.Bool("is_multipart", r.mpw != nil)
+//}
 
 func addContentDispositionHeader(req *APIRequest, key, filename string) {
 	req.AddHeader(

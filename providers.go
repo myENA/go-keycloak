@@ -4,10 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"sync"
+	"net/url"
 	"time"
-
-	"github.com/dgrijalva/jwt-go"
 )
 
 const (
@@ -27,7 +25,110 @@ func IsTokenExpiredErr(err error) bool {
 	return false
 }
 
-// TokenProvider
+// AuthServerURLProvider defines a single-user provider that is called once during client initialization, and is
+// expected to return the full address and any path prefix for the target keycloak server.
+//
+// For example, if your hostname is example.com and you have keycloak behind a proxy that looks for the "/auth" path,
+// the value returned from this must be "https://example.com/auth", or an error.
+type AuthServerURLProvider interface {
+	// AuthServerURL must set the key defined by ContextKeyIssuerAddress in the context, returning a descriptive
+	// error if it was unable to do so
+	AuthServerURL() (string, error)
+}
+
+type staticAuthServerURLProvider string
+
+func (ip staticAuthServerURLProvider) AuthServerURL() (string, error) {
+	return string(ip), nil
+}
+
+// NewAuthServerURLProvider builds an AuthServerURLProvider that will set the issuer address value provided to this constructor,
+// unless the context provided to the setter already contains an an issuer address key
+func NewAuthServerURLProvider(authServerURL string) AuthServerURLProvider {
+	return staticAuthServerURLProvider(authServerURL)
+}
+
+// NewAuthServerURLProviderWithURL will construct a new staticAuthServerURLProvider using the provided *url.URL
+func NewAuthServerURLProviderWithURL(purl *url.URL) AuthServerURLProvider {
+	if purl == nil {
+		panic("why did you pass me a nil *url.URL...")
+	}
+	return NewAuthServerURLProvider(purl.String())
+}
+
+// NewEnvironmentIssuerProvider will attempt to read the specified variable from the environment
+func NewEnvironmentIssuerProvider(varName string) AuthServerURLProvider {
+	return NewAuthServerURLProvider(ensureEnvVar(varName))
+}
+
+func defaultIssuerProvider() AuthServerURLProvider {
+	return NewAuthServerURLProvider("http://127.0.0.1/auth")
+}
+
+// RealmProvider
+type RealmProvider interface {
+	// RealmName must return either the name of the realm targeted by this client or a useful error
+	RealmName() (string, error)
+	EnvironmentConfig(*APIClient) (*RealmEnvironment, error)
+}
+
+type staticRealmProvider string
+
+// NewRealmProvider will return to you a type of RealmProvider that, given that the incoming context does not
+// already have a realm defined, will always set it to the value provided to this constructor
+func NewRealmProvider(keycloakRealm string) RealmProvider {
+	return staticRealmProvider(keycloakRealm)
+}
+
+// EnvironmentConfig attempts to construct
+func (rp staticRealmProvider) EnvironmentConfig(client *APIClient) (*RealmEnvironment, error) {
+	var (
+		v   interface{}
+		ok  bool
+		env *RealmEnvironment
+		err error
+
+		cacheKey = buildRealmEnvCacheKey(client.AuthServerURL(), string(rp))
+	)
+	// fetch or build realm env config
+	if v, ok = globalCache.Load(cacheKey); !ok {
+		env = new(RealmEnvironment)
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		if env.oidc, err = client.OpenIDConfiguration(ctx, string(rp)); err != nil {
+			return nil, fmt.Errorf("error fetching OpenID configuration: %w", err)
+		}
+		// this is allowed to fail, as uma2 support in keycloak is "new"
+		ctx, cancel = context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		env.uma2c, _ = client.UMA2Configuration(ctx, string(rp))
+		globalCache.Store(cacheKey, env)
+	} else if env, ok = v.(*RealmEnvironment); !ok {
+		return nil, fmt.Errorf("cached environment config for realm %q expected to be %T, saw %T", env, v)
+	} else {
+		env = v.(*RealmEnvironment)
+	}
+
+	return env, nil
+}
+
+// NewRealmProviderFromEnvironment will attempt to fetch the provided env key using os.GetEnv, creating a new
+// RealmProvider with that as the value.
+func NewRealmProviderFromEnvironment(varName string) RealmProvider {
+	return staticRealmProvider(ensureEnvVar(varName))
+}
+
+// SetRealmValue will attempt to locate a pre-existing realm key on the provided context, returning the original
+// context if one is found.  If not, it will return a new context with its own realm value defined.
+func (rp staticRealmProvider) RealmName() (string, error) {
+	return string(rp), nil
+}
+
+func defaultRealmProvider() RealmProvider {
+	return NewRealmProvider("master")
+}
+
+// BearerTokenProvider
 //
 // A token provider is just that: a provider of tokens.
 //
@@ -36,48 +137,38 @@ func IsTokenExpiredErr(err error) bool {
 // 		1a. That is to say, no additional checks are done.  It will be used in the Authorization header as-is.
 //	2. If a token has expired, it MUST return an ErrTokenExpired error, or an error wrapping that error
 // 		2a. If the returned error stems from ErrTokenExpired, your provider may optionally implement the
-//			RenewableTokenProvider interface
+//			RenewableBearerTokenProvider interface
 //		2b. If any other error is returned, the call will immediately fail
-type TokenProvider interface {
-	// BearerToken must return either a valid bearer token suitable for immediate use or an error
-	BearerToken() (string, error)
+type BearerTokenProvider interface {
+	// Current must return either a valid bearer token suitable for immediate use or an error
+	Current() (string, error)
 }
 
-// RenewableTokenClient describes any client that is suitable for being used with a RenewableTokenProvider
-type RenewableTokenClient interface {
-	OpenIDConnectToken(context.Context, TokenProvider, *OpenIDConnectTokenRequest, ...RequestMutator) (*OpenIDConnectToken, error)
-	ParseToken(context.Context, string, jwt.Claims) (*jwt.Token, error)
+type staticBearerTokenProvider string
+
+// NewBearerTokenProvider returns a token provider implementation that returns a fixed token value.
+func NewBearerTokenProvider(bearerToken string) BearerTokenProvider {
+	return staticBearerTokenProvider(bearerToken)
 }
 
-// RenewableTokenProvider
-//
-// A RenewableTokenProvider is intended for use with long-running processes, most likely a Confidential Client, where
-// the credentials are fairly static or can be fetched from an external source and then used to refresh the bearer
-// token session in Keycloak.
-//
-// Refresh is only required to attempt a refresh if either the token has expired or force is set to true
-type RenewableTokenProvider interface {
-	TokenProvider
-	Renew(ctx context.Context, client RenewableTokenClient, force bool) error
-}
-
-// FullStateTokenProvider is intended for user with a confidential client install document that contains the target
-// issuer address and realm name.  It allows for an easier path to a TokenAPIClient.
-type FullStateTokenProvider interface {
-	TokenProvider
-	AuthServerURLProvider
-	TargetRealm() string
-}
-
-type staticTokenProvider string
-
-// NewTokenProvider returns a token provider implementation that returns a fixed token value.
-func NewTokenProvider(bearerToken string) TokenProvider {
-	return staticTokenProvider(bearerToken)
-}
-
-func (st staticTokenProvider) BearerToken() (string, error) {
+func (st staticBearerTokenProvider) Current() (string, error) {
 	return string(st), nil
+}
+
+func NewBearerTokenProviderFromEnvironment(varName string) BearerTokenProvider {
+	return NewBearerTokenProvider(ensureEnvVar(varName))
+}
+
+type RenewableBearerTokenProvider interface {
+	BearerTokenProvider
+	Renew() (*OpenIDConnectTokenRequest, error)
+}
+
+// CombinedEnvironmentProvider describes any provider that can fulfill auth url, realm, and renewable bearer token roles
+type CombinedEnvironmentProvider interface {
+	AuthServerURLProvider
+	RealmProvider
+	RenewableBearerTokenProvider
 }
 
 // ConfidentialClientTokenProviderConfig must be provided to a new ConfidentialClientTokenProvider upon construction
@@ -113,8 +204,6 @@ type ConfidentialClientTokenProviderConfig struct {
 // The above call returns to you a fully constructed TokenAPIClient that will utilize your provided install document
 // for requests that require authentication
 type ConfidentialClientTokenProvider struct {
-	mu sync.RWMutex
-
 	issuerAddr     string
 	clientID       string
 	clientSecret   string
@@ -247,7 +336,7 @@ func (tp *ConfidentialClientTokenProvider) Renew(ctx context.Context, client Ren
 
 // SetTokenValue will first attempt to use the locally cached last-known-good token.  If not defined or beyond the
 // expiration window, it will call RefreshToken before attempting to set the context token value.
-func (tp *ConfidentialClientTokenProvider) BearerToken() (string, error) {
+func (tp *ConfidentialClientTokenProvider) Current() (string, error) {
 	tp.mu.RLock()
 	defer tp.mu.Unlock()
 	if tp.expired() {
