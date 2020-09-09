@@ -7,18 +7,18 @@ import (
 )
 
 type AdminClientsService struct {
-	as *AdminService
+	tc *AdminTokenAPIClient
 }
 
-func NewAdminClientsService(as *AdminService) *AdminClientsService {
+func NewAdminClientsService(as *AdminTokenAPIClient) *AdminClientsService {
 	cs := new(AdminClientsService)
-	cs.as = as
+	cs.tc = as
 	return cs
 }
 
 // List returns a new admin clients service instance
-func (s *AdminService) ClientsService() *AdminClientsService {
-	return NewAdminClientsService(s)
+func (tc *AdminTokenAPIClient) ClientsService() *AdminClientsService {
+	return NewAdminClientsService(tc)
 }
 
 // List attempts to return a list of all  clients available in the Realm this client was created with
@@ -28,12 +28,12 @@ func (cs *AdminClientsService) List(ctx context.Context, clientID string, viewab
 		clients Clients
 		err     error
 	)
-	resp, err = cs.as.callAdminRealms(
+	resp, err = cs.tc.callAdminRealms(
 		ctx,
 		http.MethodGet,
 		kcPathPartClients,
 		nil,
-		addMutators(
+		appendRequestMutators(
 			mutators,
 			ValuedQueryMutator("clientId", clientID, true),
 			ValuedQueryMutator("viewableOnly", viewableOnly, true),
@@ -52,7 +52,7 @@ func (cs *AdminClientsService) Get(ctx context.Context, clientID string, mutator
 		client *Client
 		err    error
 	)
-	resp, err = cs.as.callAdminRealms(ctx, http.MethodGet, path.Join(kcPathPartClients, clientID), nil, mutators...)
+	resp, err = cs.tc.callAdminRealms(ctx, http.MethodGet, path.Join(kcPathPartClients, clientID), nil, mutators...)
 	client = new(Client)
 	if err = handleResponse(resp, http.StatusOK, client, err); err != nil {
 		return nil, err
@@ -66,7 +66,7 @@ func (cs *AdminClientsService) Create(ctx context.Context, client *ClientCreate,
 		resp *http.Response
 		err  error
 	)
-	resp, err = cs.as.callAdminRealms(ctx, http.MethodPost, kcPathPartClients, client, mutators...)
+	resp, err = cs.tc.callAdminRealms(ctx, http.MethodPost, kcPathPartClients, client, mutators...)
 	if err = handleResponse(resp, http.StatusOK, nil, err); err != nil {
 		return nil, err
 	}
@@ -75,32 +75,32 @@ func (cs *AdminClientsService) Create(ctx context.Context, client *ClientCreate,
 
 // Update attempts to update a  client in the Realm this client was created with
 func (cs *AdminClientsService) Update(ctx context.Context, clientID string, client *Client, mutators ...RequestMutator) error {
-	resp, err := cs.as.callAdminRealms(ctx, http.MethodPut, path.Join(kcPathPartClients, clientID), client, mutators...)
+	resp, err := cs.tc.callAdminRealms(ctx, http.MethodPut, path.Join(kcPathPartClients, clientID), client, mutators...)
 	return handleResponse(resp, http.StatusOK, nil, err)
 }
 
 // Delete attempts to delete a  client from the Realm this client was created with
 func (cs *AdminClientsService) Delete(ctx context.Context, clientID string, mutators ...RequestMutator) error {
-	resp, err := cs.as.callAdminRealms(ctx, http.MethodDelete, path.Join(kcPathPartClients, clientID), nil, mutators...)
+	resp, err := cs.tc.callAdminRealms(ctx, http.MethodDelete, path.Join(kcPathPartClients, clientID), nil, mutators...)
 	return handleResponse(resp, http.StatusOK, nil, err)
 }
 
 // AdminClientRolesService contains all the methods needed to manage roles associated with a given client
 type AdminClientRolesService struct {
-	kas      *AdminService
+	tc       *TokenAPIClient
 	clientID string
 }
 
-func (s *AdminService) ClientRolesService(clientID string) *AdminClientRolesService {
+func (tc *TokenAPIClient) AdminClientRolesService(clientID string) *AdminClientRolesService {
 	rs := new(AdminClientRolesService)
-	rs.kas = s
+	rs.tc = tc
 	rs.clientID = clientID
 	return rs
 }
 
 // RolesService returns a new AdminClientRolesService use to manage roles associated with the provided client id
 func (cs *AdminClientsService) RolesService(clientID string) *AdminClientRolesService {
-	return cs.as.ClientRolesService(clientID)
+	return cs.tc.AdminClientRolesService(clientID)
 }
 
 // List attempts to return all the roles defined with the provided client id
@@ -110,7 +110,7 @@ func (rs *AdminClientRolesService) List(ctx context.Context, mutators ...Request
 		roles Roles
 		err   error
 	)
-	resp, err = rs.kas.callAdminRealms(ctx, http.MethodGet, path.Join(kcPathPartClients, rs.clientID, kcPathPartRoles), nil, mutators...)
+	resp, err = rs.tc.callAdminRealms(ctx, http.MethodGet, path.Join(kcPathPartClients, rs.clientID, kcPathPartRoles), nil, mutators...)
 	roles = make(Roles, 0)
 	if err = handleResponse(resp, http.StatusOK, &roles, err); err != nil {
 		return nil, err
@@ -125,7 +125,7 @@ func (rs *AdminClientRolesService) Get(ctx context.Context, roleName string, mut
 		role *Role
 		err  error
 	)
-	resp, err = rs.kas.callAdminRealms(ctx, http.MethodGet, path.Join(kcPathPartClients, rs.clientID, kcPathPartRoles, roleName), nil, mutators...)
+	resp, err = rs.tc.callAdminRealms(ctx, http.MethodGet, path.Join(kcPathPartClients, rs.clientID, kcPathPartRoles, roleName), nil, mutators...)
 	role = new(Role)
 	if err = handleResponse(resp, http.StatusOK, role, err); err != nil {
 		return nil, err
@@ -139,7 +139,7 @@ func (rs *AdminClientRolesService) Create(ctx context.Context, role *Role, mutat
 		resp *http.Response
 		err  error
 	)
-	resp, err = rs.kas.callAdminRealms(ctx, http.MethodPost, path.Join(kcPathPartClients, rs.clientID, kcPathPartRoles), role, mutators...)
+	resp, err = rs.tc.callAdminRealms(ctx, http.MethodPost, path.Join(kcPathPartClients, rs.clientID, kcPathPartRoles), role, mutators...)
 	if err = handleResponse(resp, http.StatusOK, nil, err); err != nil {
 		return nil, err
 	}
@@ -148,13 +148,13 @@ func (rs *AdminClientRolesService) Create(ctx context.Context, role *Role, mutat
 
 // Update attempts to update the provided role within
 func (rs *AdminClientRolesService) Update(ctx context.Context, roleName string, role *Role, mutators ...RequestMutator) error {
-	resp, err := rs.kas.callAdminRealms(ctx, http.MethodPut, path.Join(kcPathPartClients, rs.clientID, kcPathPartRoles, roleName), role, mutators...)
+	resp, err := rs.tc.callAdminRealms(ctx, http.MethodPut, path.Join(kcPathPartClients, rs.clientID, kcPathPartRoles, roleName), role, mutators...)
 	return handleResponse(resp, http.StatusOK, nil, err)
 }
 
 // Delete attempts to delete the specified role
 func (rs *AdminClientRolesService) Delete(ctx context.Context, roleName string, mutators ...RequestMutator) error {
-	resp, err := rs.kas.callAdminRealms(ctx, http.MethodPut, path.Join(kcPathPartClients, rs.clientID, kcPathPartRoles, roleName), nil, mutators...)
+	resp, err := rs.tc.callAdminRealms(ctx, http.MethodPut, path.Join(kcPathPartClients, rs.clientID, kcPathPartRoles, roleName), nil, mutators...)
 	return handleResponse(resp, http.StatusOK, nil, err)
 }
 
@@ -165,12 +165,12 @@ func (rs *AdminClientRolesService) Users(ctx context.Context, roleName string, f
 		users Users
 		err   error
 	)
-	resp, err = rs.kas.callAdminRealms(
+	resp, err = rs.tc.callAdminRealms(
 		ctx,
 		http.MethodGet,
 		path.Join(kcPathPartClients, rs.clientID, kcPathPartRoles, roleName, kcPathPartUsers),
 		nil,
-		addMutators(
+		appendRequestMutators(
 			mutators,
 			ValuedQueryMutator("first", first, true),
 			ValuedQueryMutator("max", max, true),
@@ -183,21 +183,21 @@ func (rs *AdminClientRolesService) Users(ctx context.Context, roleName string, f
 }
 
 type AdminClientRoleCompositesService struct {
-	kas      *AdminService
+	tc       *TokenAPIClient
 	clientID string
 	roleName string
 }
 
-func (s *AdminService) ClientRoleCompositesService(clientID, roleName string) *AdminClientRoleCompositesService {
+func (tc *TokenAPIClient) AdminClientRoleCompositesService(clientID, roleName string) *AdminClientRoleCompositesService {
 	crs := new(AdminClientRoleCompositesService)
-	crs.kas = s
+	crs.tc = tc
 	crs.clientID = clientID
 	crs.roleName = roleName
 	return crs
 }
 
 func (rs *AdminClientRolesService) CompositesService(roleName string) *AdminClientRoleCompositesService {
-	return rs.kas.ClientRoleCompositesService(rs.clientID, roleName)
+	return rs.tc.AdminClientRoleCompositesService(rs.clientID, roleName)
 }
 
 // List attempts to return all composite roles that the specified role is a member of
@@ -207,7 +207,7 @@ func (crs *AdminClientRoleCompositesService) List(ctx context.Context, mutators 
 		roles Roles
 		err   error
 	)
-	resp, err = crs.kas.callAdminRealms(ctx, http.MethodGet, path.Join(kcPathPartClients, crs.clientID, kcPathPartRoles, crs.roleName, kcPathPartComposites), nil, mutators...)
+	resp, err = crs.tc.callAdminRealms(ctx, http.MethodGet, path.Join(kcPathPartClients, crs.clientID, kcPathPartRoles, crs.roleName, kcPathPartComposites), nil, mutators...)
 	roles = make(Roles, 0)
 	if err = handleResponse(resp, http.StatusOK, &roles, err); err != nil {
 		return nil, err
@@ -217,12 +217,12 @@ func (crs *AdminClientRoleCompositesService) List(ctx context.Context, mutators 
 
 // Add attempts to add the specified role to the provided composite roles
 func (crs *AdminClientRoleCompositesService) Add(ctx context.Context, roles Roles, mutators ...RequestMutator) error {
-	resp, err := crs.kas.callAdminRealms(ctx, http.MethodPost, path.Join(kcPathPartClients, crs.clientID, kcPathPartRoles, crs.roleName, kcPathPartComposites), roles, mutators...)
+	resp, err := crs.tc.callAdminRealms(ctx, http.MethodPost, path.Join(kcPathPartClients, crs.clientID, kcPathPartRoles, crs.roleName, kcPathPartComposites), roles, mutators...)
 	return handleResponse(resp, http.StatusOK, nil, err)
 }
 
 // Remove attempts to remove the provided role from the specified composite roles
 func (crs *AdminClientRoleCompositesService) Remove(ctx context.Context, roles Roles, mutators ...RequestMutator) error {
-	resp, err := crs.kas.callAdminRealms(ctx, http.MethodDelete, path.Join(kcPathPartClients, crs.clientID, kcPathPartRoles, crs.roleName, kcPathPartComposites), roles, mutators...)
+	resp, err := crs.tc.callAdminRealms(ctx, http.MethodDelete, path.Join(kcPathPartClients, crs.clientID, kcPathPartRoles, crs.roleName, kcPathPartComposites), roles, mutators...)
 	return handleResponse(resp, http.StatusOK, nil, err)
 }

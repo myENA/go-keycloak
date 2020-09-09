@@ -8,6 +8,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/dgrijalva/jwt-go"
@@ -16,38 +17,35 @@ import (
 // TokenParser represents any type that can handle parsing and persisting a range of certificate types
 type TokenParser interface {
 	// Parse must attempt to validate the provided token was signed using the mechanism expected by the realm's issuer
-	Parse(context.Context, *RealmAPIClient, *jwt.Token) (pk interface{}, err error)
+	Parse(context.Context, *TokenAPIClient, *jwt.Token) (pk interface{}, err error)
 	SupportedAlgorithms() []string
 }
 
 type X509TokenParser struct {
-	pks  PublicKeyStore
+	mu   sync.RWMutex
 	dttl time.Duration
 }
 
 // NewX509TokenParser will return to you a token parser capable of handling most RSA & ECDSA signed tokens and keys
-func NewX509TokenParser(pks PublicKeyStore, defaultTTL time.Duration) *X509TokenParser {
-	if pks == nil {
-		panic(fmt.Sprintf("must provide key cache"))
-	}
+func NewX509TokenParser(cacheTTL time.Duration) *X509TokenParser {
 	xtp := new(X509TokenParser)
-	xtp.pks = pks
-	xtp.dttl = defaultTTL
+	xtp.dttl = cacheTTL
 	return xtp
 }
 
-func (tp *X509TokenParser) Parse(ctx context.Context, client *RealmAPIClient, token *jwt.Token) (interface{}, error) {
+func (tp *X509TokenParser) Parse(ctx context.Context, client *TokenAPIClient, token *jwt.Token) (interface{}, error) {
 	var (
-		kid     string
-		pub     interface{}
-		rpk     *rsa.PublicKey
-		epk     *ecdsa.PublicKey
-		expires *time.Time
-		ok      bool
-		err     error
+		kid      string
+		cacheKey string
+		pub      interface{}
+		rpk      *rsa.PublicKey
+		epk      *ecdsa.PublicKey
+		expires  *time.Time
+		ok       bool
+		err      error
 
-		iss = client.Environment().IssuerAddress()
-		rn  = client.RealmName()
+		authServerURL = client.RealmEnvironment().IssuerAddress()
+		realmName     = client.RealmName()
 	)
 
 	if client == nil {
@@ -67,11 +65,21 @@ func (tp *X509TokenParser) Parse(ctx context.Context, client *RealmAPIClient, to
 		return nil, fmt.Errorf("token header key \"kid\" has non-string value: %v (%[1]T)", v)
 	}
 
-	if pub, ok = tp.pks.Load(iss, rn, kid); !ok {
-		if pub, expires, err = tp.fetchPK(ctx, client, kid); err != nil {
-			return nil, fmt.Errorf("error loading public key: %w", err)
+	cacheKey = buildPKCacheKey(authServerURL, realmName, kid)
+
+	tp.mu.RLock()
+	if pub, ok = client.CacheBackend().Load(cacheKey); !ok {
+		tp.mu.RUnlock()
+		tp.mu.Lock()
+		defer tp.mu.Unlock()
+		if pub, ok = client.CacheBackend().Load(cacheKey); !ok {
+			if pub, expires, err = tp.fetchPK(ctx, client, kid); err != nil {
+				return nil, fmt.Errorf("error loading public key: %w", err)
+			}
+			client.CacheBackend().StoreUntil(cacheKey, pub, *expires)
 		}
-		tp.pks.Store(iss, rn, kid, pub, *expires)
+	} else {
+		defer tp.mu.RUnlock()
 	}
 
 	// perform some basic type assertions
@@ -114,7 +122,7 @@ func (tp *X509TokenParser) supports(alg string) bool {
 	return false
 }
 
-func (tp *X509TokenParser) fetchPKLegacy(ctx context.Context, client *RealmAPIClient) (interface{}, *time.Time, error) {
+func (tp *X509TokenParser) fetchPKLegacy(ctx context.Context, client *TokenAPIClient) (interface{}, *time.Time, error) {
 	var (
 		conf *RealmIssuerConfiguration
 		b    []byte
@@ -134,7 +142,7 @@ func (tp *X509TokenParser) fetchPKLegacy(ctx context.Context, client *RealmAPICl
 	return pub, &exp, nil
 }
 
-func (tp *X509TokenParser) fetchPKByID(ctx context.Context, client *RealmAPIClient, kid string) (interface{}, *time.Time, error) {
+func (tp *X509TokenParser) fetchPKByID(ctx context.Context, client *TokenAPIClient, kid string) (interface{}, *time.Time, error) {
 	var (
 		b    []byte
 		jwks *JSONWebKeySet
@@ -146,7 +154,7 @@ func (tp *X509TokenParser) fetchPKByID(ctx context.Context, client *RealmAPIClie
 		return nil, nil, fmt.Errorf("error fetching json web keys: %w", err)
 	}
 	if jwk = jwks.KeychainByID(kid); jwk == nil {
-		return nil, nil, fmt.Errorf("issuer %q realm %q has no key with id %q", client.Environment().IssuerAddress(), client.RealmName(), kid)
+		return nil, nil, fmt.Errorf("issuer %q realm %q has no key with id %q", client.RealmEnvironment().IssuerAddress(), client.RealmName(), kid)
 	}
 	// todo: use full chain
 	if len(jwk.X509CertificateChain) == 0 {
@@ -161,8 +169,8 @@ func (tp *X509TokenParser) fetchPKByID(ctx context.Context, client *RealmAPIClie
 	return cert.PublicKey, &cert.NotAfter, nil
 }
 
-func (tp *X509TokenParser) fetchPK(ctx context.Context, client *RealmAPIClient, keyID string) (interface{}, *time.Time, error) {
-	if client.Environment().SupportsUMA2() {
+func (tp *X509TokenParser) fetchPK(ctx context.Context, client *TokenAPIClient, keyID string) (interface{}, *time.Time, error) {
+	if client.RealmEnvironment().SupportsUMA2() {
 		if pk, deadline, err := tp.fetchPKByID(ctx, client, keyID); err == nil {
 			return pk, deadline, nil
 		}

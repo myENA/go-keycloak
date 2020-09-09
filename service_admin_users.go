@@ -7,12 +7,12 @@ import (
 )
 
 type AdminUsersService struct {
-	kas *AdminService
+	tc *AdminTokenAPIClient
 }
 
-func (s *AdminService) UsersService() *AdminUsersService {
+func (tc *AdminTokenAPIClient) UsersService() *AdminUsersService {
 	us := new(AdminUsersService)
-	us.kas = s
+	us.tc = tc
 	return us
 }
 
@@ -23,12 +23,12 @@ func (us *AdminUsersService) List(ctx context.Context, email, firstName, lastNam
 		users Users
 		err   error
 	)
-	resp, err = us.kas.callAdminRealms(
+	resp, err = us.tc.callAdminRealms(
 		ctx,
 		http.MethodGet,
 		kcPathPartUsers,
 		nil,
-		addMutators(
+		appendRequestMutators(
 			mutators,
 			ValuedQueryMutator("email", email, true),
 			ValuedQueryMutator("firstName", firstName, true),
@@ -52,19 +52,19 @@ func (us *AdminUsersService) Count(ctx context.Context, mutators ...RequestMutat
 		count int
 		err   error
 	)
-	resp, err = us.kas.callAdminRealms(ctx, http.MethodGet, path.Join(kcPathPartUsers, kcPathPartCount), nil, mutators...)
+	resp, err = us.tc.callAdminRealms(ctx, http.MethodGet, path.Join(kcPathPartUsers, kcPathPartCount), nil, mutators...)
 	// ok to not check handle response separately as zero-val for int is same whether or not there is an error
 	return count, handleResponse(resp, http.StatusOK, &count, err)
 }
 
-// Get attempts to query  for a specific user based on their ID
+// Get attempts to query  for a specific user based on their InstallDocument
 func (us *AdminUsersService) Get(ctx context.Context, userID string, mutators ...RequestMutator) (*User, error) {
 	var (
 		resp *http.Response
 		user *User
 		err  error
 	)
-	resp, err = us.kas.callAdminRealms(ctx, http.MethodGet, path.Join(kcPathPartUsers, userID), nil, mutators...)
+	resp, err = us.tc.callAdminRealms(ctx, http.MethodGet, path.Join(kcPathPartUsers, userID), nil, mutators...)
 	user = new(User)
 	if err = handleResponse(resp, http.StatusOK, user, err); err != nil {
 		return nil, err
@@ -78,7 +78,7 @@ func (us *AdminUsersService) Create(ctx context.Context, user *UserCreate, mutat
 		resp *http.Response
 		err  error
 	)
-	resp, err = us.kas.callAdminRealms(ctx, http.MethodPost, kcPathPartUsers, user, mutators...)
+	resp, err = us.tc.callAdminRealms(ctx, http.MethodPost, kcPathPartUsers, user, mutators...)
 	if err = handleResponse(resp, http.StatusOK, nil, err); err != nil {
 		return nil, err
 	}
@@ -87,30 +87,30 @@ func (us *AdminUsersService) Create(ctx context.Context, user *UserCreate, mutat
 
 // Update attempts to push an updated user definition
 func (us *AdminUsersService) Update(ctx context.Context, userID string, user *User, mutators ...RequestMutator) error {
-	resp, err := us.kas.callAdminRealms(ctx, http.MethodPut, path.Join(kcPathPartUsers, userID), user, mutators...)
+	resp, err := us.tc.callAdminRealms(ctx, http.MethodPut, path.Join(kcPathPartUsers, userID), user, mutators...)
 	return handleResponse(resp, http.StatusOK, nil, err)
 }
 
 // Delete attempts to delete a user from the keycloak realm
 func (us *AdminUsersService) Delete(ctx context.Context, userID string, mutators ...RequestMutator) error {
-	resp, err := us.kas.callAdminRealms(ctx, http.MethodDelete, path.Join(kcPathPartUsers, userID), nil, mutators...)
+	resp, err := us.tc.callAdminRealms(ctx, http.MethodDelete, path.Join(kcPathPartUsers, userID), nil, mutators...)
 	return handleResponse(resp, http.StatusOK, nil, err)
 }
 
 type AdminUserGroupsService struct {
-	kas    *AdminService
+	kas    *AdminTokenAPIClient
 	userID string
 }
 
-func (s *AdminService) UserGroupsService(userID string) *AdminUserGroupsService {
+func (tc *AdminTokenAPIClient) UserGroupsService(userID string) *AdminUserGroupsService {
 	gs := new(AdminUserGroupsService)
-	gs.kas = s
+	gs.kas = tc
 	gs.userID = userID
 	return gs
 }
 
 func (us *AdminUsersService) GroupsService(userID string) *AdminUserGroupsService {
-	return us.kas.UserGroupsService(userID)
+	return us.tc.UserGroupsService(userID)
 }
 
 // List attempts to return the list of  groups the provided User is a member of
@@ -141,19 +141,19 @@ func (gs *AdminUserGroupsService) Remove(ctx context.Context, groupID string, mu
 }
 
 type AdminUserRoleMappingsService struct {
-	kas    *AdminService
+	kas    *AdminTokenAPIClient
 	userID string
 }
 
-func (s *AdminService) UserRoleMappingsService(userID string) *AdminUserRoleMappingsService {
+func (tc *AdminTokenAPIClient) UserRoleMappingsService(userID string) *AdminUserRoleMappingsService {
 	rms := new(AdminUserRoleMappingsService)
-	rms.kas = s
+	rms.kas = tc
 	rms.userID = userID
 	return rms
 }
 
 func (us *AdminUsersService) RoleMappingService(userID string) *AdminUserRoleMappingsService {
-	return us.kas.UserRoleMappingsService(userID)
+	return us.tc.UserRoleMappingsService(userID)
 }
 
 func (rms *AdminUserRoleMappingsService) Get(ctx context.Context, mutators ...RequestMutator) (*RoleMapping, error) {
@@ -171,13 +171,13 @@ func (rms *AdminUserRoleMappingsService) Get(ctx context.Context, mutators ...Re
 }
 
 type AdminUserRoleMappingRealmsService struct {
-	kas    *AdminService
+	kas    *AdminTokenAPIClient
 	userID string
 }
 
-func (s *AdminService) UserRoleMappingRealmsService(userID string) *AdminUserRoleMappingRealmsService {
+func (tc *AdminTokenAPIClient) UserRoleMappingRealmsService(userID string) *AdminUserRoleMappingRealmsService {
 	rms := new(AdminUserRoleMappingRealmsService)
-	rms.kas = s
+	rms.kas = tc
 	rms.userID = userID
 	return rms
 }

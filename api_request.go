@@ -353,7 +353,7 @@ func (r *APIRequest) ToHTTP(ctx context.Context) (*http.Request, error) {
 
 //
 //func (r *APIRequest) MarshalZerologObject(ev *zerolog.Event) {
-//	ev.Uint64("request_id", r.ID())
+//	ev.Uint64("request_id", r.InstallDocument())
 //	ev.Str("method", r.Method())
 //	ev.Str("uri", r.URI())
 //	ev.Str("compiled_uri", r.CompiledURI())

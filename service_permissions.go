@@ -12,10 +12,10 @@ import (
 )
 
 type PermissionsService struct {
-	tc *tokenAPIClient
+	tc *TokenAPIClient
 }
 
-func (tc *tokenAPIClient) PermissionsService() *PermissionsService {
+func (tc *TokenAPIClient) PermissionsService() *PermissionsService {
 	ps := new(PermissionsService)
 	ps.tc = tc
 	return ps
@@ -33,10 +33,10 @@ func (ps *PermissionsService) Evaluate(ctx context.Context, req *OpenIDConnectTo
 		return nil, fmt.Errorf("error encoding request: %w", err)
 	}
 	body.Set(paramResponseMode, UMA2ResponseModePermissions)
-	resp, err = ps.tc.callFn(
+	resp, err = ps.tc.Call(
 		ctx,
 		http.MethodPost,
-		ps.tc.env.TokenEndpoint(),
+		ps.tc.realmEnv.TokenEndpoint(),
 		strings.NewReader(body.Encode()),
 		HeaderMutator(httpHeaderContentType, httpHeaderValueFormURLEncoded, true))
 	perms = make(EvaluatedPermissions, 0)
@@ -65,7 +65,7 @@ func (ps *PermissionsService) Decide(ctx context.Context, req *OpenIDConnectToke
 	resp, err = ps.tc.callRealms(
 		ctx,
 		http.MethodPost,
-		ps.tc.env.TokenEndpoint(),
+		ps.tc.realmEnv.TokenEndpoint(),
 		strings.NewReader(body.Encode()),
 		HeaderMutator(httpHeaderContentType, httpHeaderValueFormURLEncoded, true))
 	if err = handleResponse(resp, http.StatusOK, decision, err); err != nil {

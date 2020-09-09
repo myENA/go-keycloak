@@ -85,23 +85,6 @@ func getConfig(t *testing.T) *testConfig {
 	return conf
 }
 
-type staticTP struct {
-	token string
-	realm string
-}
-
-func (tp staticTP) TargetRealm() string {
-	return tp.realm
-}
-
-func (tp staticTP) Current() (string, error) {
-	return tp.token, nil
-}
-
-func newStaticTP(token, realm string) staticTP {
-	return staticTP{token, realm}
-}
-
 func buildClientConfigMutators(conf *testConfig, mutators ...keycloak.ConfigMutator) []keycloak.ConfigMutator {
 	if mutators == nil {
 		mutators = make([]keycloak.ConfigMutator, 0)
@@ -109,21 +92,6 @@ func buildClientConfigMutators(conf *testConfig, mutators ...keycloak.ConfigMuta
 	mutators = append(mutators, func(config *keycloak.APIClientConfig) {
 		config.AuthServerURLProvider = keycloak.NewAuthServerURLProvider(conf.Issuer)
 	})
-	mutators = append(
-		mutators,
-		func(config *keycloak.APIClientConfig) {
-			if conf.Logging.Enabled {
-				lw := zerolog.NewConsoleWriter(func(w *zerolog.ConsoleWriter) {
-					if conf.Logging.Out == "stdout" {
-						w.Out = os.Stdout
-					} else {
-						w.Out = os.Stderr
-					}
-				})
-				config.Logger = zerolog.New(lw).Level(conf.Logging.Level).With().Timestamp().Logger()
-			}
-		},
-	)
 
 	return mutators
 }
@@ -144,10 +112,13 @@ func newClient(t *testing.T, conf *testConfig, mutators ...keycloak.ConfigMutato
 	return cl
 }
 
-func newRealmClient(t *testing.T, conf *testConfig, mutators ...keycloak.ConfigMutator) *keycloak.RealmAPIClient {
+func newBearerTokenClient(t *testing.T, conf *testConfig, mutators ...keycloak.ConfigMutator) *keycloak.TokenAPIClient {
 	var (
 		cl  *keycloak.APIClient
+		tc  *keycloak.TokenAPIClient
 		err error
+
+		tcc = new(keycloak.TokenAPIClientConfig)
 	)
 
 	if cl = newClient(t, conf, mutators...); cl == nil {
@@ -160,36 +131,18 @@ func newRealmClient(t *testing.T, conf *testConfig, mutators ...keycloak.ConfigM
 		return nil
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
-	rc, err := cl.RealmAPIClient(ctx, conf.Realm)
-	if err != nil {
-		t.Logf("Error constructing realm client: %v", err)
-		t.FailNow()
-		return nil
-	}
-
-	return rc
-}
-
-func newBearerTokenClient(t *testing.T, conf *testConfig, mutators ...keycloak.ConfigMutator) *keycloak.TokenAPIClient {
-	var (
-		rc  *keycloak.RealmAPIClient
-		tc  *keycloak.TokenAPIClient
-		err error
-	)
-
 	if conf.BearerToken == "" {
 		t.Log("bearer_token key is empty in config")
 		t.FailNow()
 		return nil
 	}
 
-	if rc = newRealmClient(t, conf, mutators...); rc == nil {
-		return nil
-	}
+	tcc.RealmProvider = keycloak.NewRealmProvider(conf.Realm, 0)
+	tcc.BearerTokenProvider = keycloak.NewBearerTokenProvider(conf.BearerToken)
 
-	if tc, err = rc.TokenAPIClient(newStaticTP(conf.BearerToken, rc.RealmName())); err != nil {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	if tc, err = cl.TokenAPIClient(ctx, tcc); err != nil {
 		t.Logf("Error constructing token client: %v", err)
 		t.FailNow()
 		return nil
@@ -201,12 +154,13 @@ func newBearerTokenClient(t *testing.T, conf *testConfig, mutators ...keycloak.C
 func newConfidentialClientTokenClient(t *testing.T, conf *testConfig, mutators ...keycloak.ConfigMutator) *keycloak.TokenAPIClient {
 	var (
 		tc  *keycloak.TokenAPIClient
+		ctp keycloak.CombinedEnvironmentProvider
 		err error
 
 		tpc = new(keycloak.ConfidentialClientTokenProviderConfig)
 	)
 
-	tpc.ID = conf.InstallDocument
+	tpc.InstallDocument = conf.InstallDocument
 	mutators = buildClientConfigMutators(conf, mutators...)
 
 	if conf.InstallDocument == nil {
@@ -215,9 +169,15 @@ func newConfidentialClientTokenClient(t *testing.T, conf *testConfig, mutators .
 		return nil
 	}
 
+	if ctp, err = keycloak.NewConfidentialClientTokenProvider(tpc); err != nil {
+		t.Logf("Error creating new confidential client token provider: %v", err)
+		t.FailNow()
+		return nil
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	if tc, err = keycloak.NewTokenAPIClientForConfidentialClient(ctx, keycloak.CompileAPIClientConfig(nil, mutators...), tpc); err != nil {
+	if tc, err = keycloak.NewTokenAPIClientWithProvider(ctx, keycloak.CompileAPIClientConfig(nil, mutators...), ctp); err != nil {
 		t.Logf("error constructiong token api client: %v", err)
 		t.FailNow()
 		return nil
@@ -229,7 +189,7 @@ func newConfidentialClientTokenClient(t *testing.T, conf *testConfig, mutators .
 func TestRealmIssuerConfig(t *testing.T) {
 	t.Parallel()
 	conf := getConfig(t)
-	cl := newRealmClient(t, conf)
+	cl := newBearerTokenClient(t, conf)
 	if cl == nil || t.Failed() {
 		return
 	}
@@ -248,7 +208,7 @@ func TestWellKnownConfigs(t *testing.T) {
 	t.Run("oidc", func(t *testing.T) {
 		t.Parallel()
 		conf := getConfig(t)
-		cl := newRealmClient(t, conf)
+		cl := newBearerTokenClient(t, conf)
 		if cl == nil || t.Failed() {
 			return
 		}
@@ -266,7 +226,7 @@ func TestWellKnownConfigs(t *testing.T) {
 	t.Run("uma2", func(t *testing.T) {
 		t.Parallel()
 		conf := getConfig(t)
-		cl := newRealmClient(t, conf)
+		cl := newBearerTokenClient(t, conf)
 		if cl == nil || t.Failed() {
 			return
 		}

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"sync"
 	"time"
 )
 
@@ -65,47 +66,68 @@ func defaultIssuerProvider() AuthServerURLProvider {
 	return NewAuthServerURLProvider("http://127.0.0.1/auth")
 }
 
-// RealmProvider
-type RealmProvider interface {
+// RealmEnvironmentProvider
+type RealmEnvironmentProvider interface {
 	// RealmName must return either the name of the realm targeted by this client or a useful error
 	RealmName() (string, error)
-	EnvironmentConfig(*APIClient) (*RealmEnvironment, error)
+	RealmEnvironment(ctx context.Context, client *APIClient) (*RealmEnvironment, error)
 }
 
-type staticRealmProvider string
+type staticRealmProvider struct {
+	mu          sync.RWMutex
+	realmName   string
+	envCacheTTL time.Duration
+}
 
-// NewRealmProvider will return to you a type of RealmProvider that, given that the incoming context does not
+// NewRealmProvider will return to you a type of RealmEnvironmentProvider that, given that the incoming context does not
 // already have a realm defined, will always set it to the value provided to this constructor
-func NewRealmProvider(keycloakRealm string) RealmProvider {
-	return staticRealmProvider(keycloakRealm)
+func NewRealmProvider(keycloakRealm string, envCacheTTL time.Duration) RealmEnvironmentProvider {
+	return &staticRealmProvider{realmName: keycloakRealm, envCacheTTL: envCacheTTL}
 }
 
 // EnvironmentConfig attempts to construct
-func (rp staticRealmProvider) EnvironmentConfig(client *APIClient) (*RealmEnvironment, error) {
+func (rp *staticRealmProvider) RealmEnvironment(ctx context.Context, client *APIClient) (*RealmEnvironment, error) {
 	var (
 		v   interface{}
 		ok  bool
 		env *RealmEnvironment
 		err error
 
-		cacheKey = buildRealmEnvCacheKey(client.AuthServerURL(), string(rp))
+		cacheKey = buildRealmEnvCacheKey(client.AuthServerURL(), rp.realmName)
 	)
+
+	// acquire read lock first
+	rp.mu.RLock()
+
 	// fetch or build realm env config
-	if v, ok = globalCache.Load(cacheKey); !ok {
-		env = new(RealmEnvironment)
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-		defer cancel()
-		if env.oidc, err = client.OpenIDConfiguration(ctx, string(rp)); err != nil {
-			return nil, fmt.Errorf("error fetching OpenID configuration: %w", err)
+	if v, ok = client.CacheBackend().Load(cacheKey); !ok {
+		// if not found in cache, acquire full lock
+		rp.mu.RUnlock()
+		rp.mu.Lock()
+		// queue up unlock
+		defer rp.mu.Unlock()
+		// test once more, as another process may have already populated cache between full lock acquisition
+		if v, ok = client.CacheBackend().Load(cacheKey); !ok {
+			// if we land here, we're the one to build the cache entry
+			env = new(RealmEnvironment)
+			if env.oidc, err = client.OpenIDConfiguration(ctx, rp.realmName); err != nil {
+				// ensure we unlock before returning
+				return nil, fmt.Errorf("error fetching OpenID configuration: %w", err)
+			}
+			// this is allowed to fail, as uma2 support in keycloak is "new"
+			env.uma2c, _ = client.UMA2Configuration(ctx, rp.realmName)
+			// persist new cache entry
+			client.CacheBackend().StoreUntil(cacheKey, env, time.Now().Add(rp.envCacheTTL))
 		}
-		// this is allowed to fail, as uma2 support in keycloak is "new"
-		ctx, cancel = context.WithTimeout(context.Background(), 2*time.Second)
-		defer cancel()
-		env.uma2c, _ = client.UMA2Configuration(ctx, string(rp))
-		globalCache.Store(cacheKey, env)
-	} else if env, ok = v.(*RealmEnvironment); !ok {
-		return nil, fmt.Errorf("cached environment config for realm %q expected to be %T, saw %T", env, v)
 	} else {
+		// queue up unlock
+		defer rp.mu.RUnlock()
+	}
+
+	// if env was not initialized above, v will be.  cast.
+	// if this panics, implementation is buggered and must be fixed.
+	if env == nil {
+		// this will panic if somebody overwrote the cache entry with something else.  scream at them.
 		env = v.(*RealmEnvironment)
 	}
 
@@ -113,19 +135,19 @@ func (rp staticRealmProvider) EnvironmentConfig(client *APIClient) (*RealmEnviro
 }
 
 // NewRealmProviderFromEnvironment will attempt to fetch the provided env key using os.GetEnv, creating a new
-// RealmProvider with that as the value.
-func NewRealmProviderFromEnvironment(varName string) RealmProvider {
-	return staticRealmProvider(ensureEnvVar(varName))
+// RealmEnvironmentProvider with that as the value.
+func NewRealmProviderFromEnvironment(varName string) RealmEnvironmentProvider {
+	return NewRealmProvider(ensureEnvVar(varName), 24*time.Hour)
 }
 
 // SetRealmValue will attempt to locate a pre-existing realm key on the provided context, returning the original
 // context if one is found.  If not, it will return a new context with its own realm value defined.
-func (rp staticRealmProvider) RealmName() (string, error) {
-	return string(rp), nil
+func (rp *staticRealmProvider) RealmName() (string, error) {
+	return rp.realmName, nil
 }
 
-func defaultRealmProvider() RealmProvider {
-	return NewRealmProvider("master")
+func defaultRealmProvider() RealmEnvironmentProvider {
+	return NewRealmProvider("master", 24*time.Hour)
 }
 
 // BearerTokenProvider
@@ -161,22 +183,22 @@ func NewBearerTokenProviderFromEnvironment(varName string) BearerTokenProvider {
 
 type RenewableBearerTokenProvider interface {
 	BearerTokenProvider
-	Renew() (*OpenIDConnectTokenRequest, error)
+	Renew(ctx context.Context, client *TokenAPIClient, force bool) error
 }
 
 // CombinedEnvironmentProvider describes any provider that can fulfill auth url, realm, and renewable bearer token roles
 type CombinedEnvironmentProvider interface {
 	AuthServerURLProvider
-	RealmProvider
+	RealmEnvironmentProvider
 	RenewableBearerTokenProvider
 }
 
 // ConfidentialClientTokenProviderConfig must be provided to a new ConfidentialClientTokenProvider upon construction
 type ConfidentialClientTokenProviderConfig struct {
-	// ID [optional] (required if IDKey left blank)
+	// InstallDocument [optional]
 	//
 	// If you already have a confidential client install document handy, you may pass it in here.
-	ID *InstallDocument `json:"id"`
+	InstallDocument *InstallDocument `json:"id"`
 
 	// ExpiryMargin [optional]
 	//
@@ -192,7 +214,7 @@ type ConfidentialClientTokenProviderConfig struct {
 // Easiest way to implement would be the following:
 //
 //	conf := keycloak.ConfidentialClientTokenProviderConfig {
-//		ID: {id document}
+//		InstallDocument: {id document}
 //	}
 //  ctx, cancel := context.WithTimeout(context.Background(), 2 * time.Second)
 //  defer cancel()
@@ -204,11 +226,13 @@ type ConfidentialClientTokenProviderConfig struct {
 // The above call returns to you a fully constructed TokenAPIClient that will utilize your provided install document
 // for requests that require authentication
 type ConfidentialClientTokenProvider struct {
-	issuerAddr     string
+	*staticAuthServerURLProvider
+	*staticRealmProvider
+	mu sync.RWMutex
+
 	clientID       string
 	clientSecret   string
 	expiryMargin   time.Duration
-	clientRealm    string
 	token          *OpenIDConnectToken
 	tokenRefreshed int64
 	tokenExpiry    int64
@@ -227,11 +251,11 @@ func NewConfidentialClientTokenProvider(conf *ConfidentialClientTokenProviderCon
 		tp           = new(ConfidentialClientTokenProvider)
 	)
 
-	if conf.ID == nil {
-		return nil, errors.New("ID must be defined")
+	if conf.InstallDocument == nil {
+		return nil, errors.New("InstallDocument must be defined")
 	}
 
-	id = conf.ID
+	id = conf.InstallDocument
 
 	// validate doc
 	if len(id.Credentials) == 0 {
@@ -249,21 +273,14 @@ func NewConfidentialClientTokenProvider(conf *ConfidentialClientTokenProviderCon
 		expiryMargin = conf.ExpiryMargin
 	}
 
-	tp.issuerAddr = id.AuthServerURL
+	tp.staticAuthServerURLProvider = NewAuthServerURLProvider(id.AuthServerURL).(*staticAuthServerURLProvider)
+	tp.staticRealmProvider = NewRealmProvider(id.Realm, 24*time.Hour).(*staticRealmProvider)
+
 	tp.clientID = id.Resource
-	tp.clientRealm = id.Realm
 	tp.clientSecret = secretStr
 	tp.expiryMargin = expiryMargin
 
 	return tp, nil
-}
-
-func (tp *ConfidentialClientTokenProvider) AuthServerURL() (string, error) {
-	return tp.issuerAddr, nil
-}
-
-func (tp *ConfidentialClientTokenProvider) TargetRealm() string {
-	return tp.clientRealm
 }
 
 // LastRefreshed returns a unix nano timestamp of the last time this client's bearer token was refreshed.
@@ -297,12 +314,21 @@ func (tp *ConfidentialClientTokenProvider) Expired() bool {
 }
 
 // RefreshToken provides an external way to manually refresh a bearer token
-func (tp *ConfidentialClientTokenProvider) Renew(ctx context.Context, client RenewableTokenClient, force bool) error {
-	tp.mu.Lock()
-	defer tp.mu.Unlock()
+func (tp *ConfidentialClientTokenProvider) Renew(ctx context.Context, client *TokenAPIClient, force bool) error {
+	tp.mu.RLock()
 
 	// check if there is anything to actually do.
 	if !force && !tp.expired() {
+		tp.mu.RUnlock()
+		return nil
+	}
+
+	tp.mu.RUnlock()
+	tp.mu.Lock()
+	defer tp.mu.Unlock()
+
+	// test to ensure that another routine did not grab the lock and already refresh the token.
+	if !tp.expired() {
 		return nil
 	}
 
@@ -318,7 +344,7 @@ func (tp *ConfidentialClientTokenProvider) Renew(ctx context.Context, client Ren
 	req.ClientSecret = tp.clientSecret
 
 	// fetch new oidc token
-	if oidc, err = client.OpenIDConnectToken(ctx, nil, req); err != nil {
+	if oidc, err = client.APIClient.OpenIDConnectToken(ctx, client.RealmEnvironment(), req); err != nil {
 		return fmt.Errorf("unable to fetch OpenIDConnectToken: %w", err)
 	}
 

@@ -27,10 +27,10 @@ func RequestBearerToken(request *http.Request) (string, bool) {
 func parseResponseLocations(resp *http.Response) ([]string, error) {
 	locations, ok := resp.Header[httpHeaderLocationKey]
 	if !ok {
-		return nil, errors.New("unable to locate new ID in response")
+		return nil, errors.New("unable to locate new InstallDocument in response")
 	}
 	if ll := len(locations); ll == 0 {
-		return nil, errors.New("unable to locate new ID in response")
+		return nil, errors.New("unable to locate new InstallDocument in response")
 	}
 	return locations, nil
 }
@@ -143,7 +143,7 @@ func copyStrs(src []string) []string {
 	return dst
 }
 
-func addMutators(root []RequestMutator, m ...RequestMutator) []RequestMutator {
+func appendRequestMutators(root []RequestMutator, m ...RequestMutator) []RequestMutator {
 	if root == nil {
 		root = make([]RequestMutator, 0)
 	}
