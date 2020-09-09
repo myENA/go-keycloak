@@ -296,18 +296,17 @@ func TestConfidentialClientTokenProvider(t *testing.T) {
 		return
 	}
 
-	t.Run("get-token", func(t *testing.T) {
-		if _, err := tc.TokenProvider().Current(); err != nil {
-			t.Logf("Failed to fetch bearer token from provider: %v", err)
-			t.FailNow()
-		}
-	})
+	if _, err := tc.TokenProvider().Current(); err == nil || !keycloak.IsTokenExpiredErr(err) {
+		t.Logf("Expected initial state of token provider to be expired, saw %v", err)
+		t.FailNow()
+		return
+	}
 
-	t.Run("refresh-token", func(t *testing.T) {
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-		defer cancel()
-		if err := tc.TokenProvider().(keycloak.RenewableBearerTokenProvider).Renew(ctx, tc, false); err != nil {
-
-		}
-	})
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	if err := tc.TokenProvider().(keycloak.RenewableBearerTokenProvider).Renew(ctx, tc, false); err != nil {
+		t.Logf("error renewing confidential client token: %v", err)
+		t.FailNow()
+		return
+	}
 }

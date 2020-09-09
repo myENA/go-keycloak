@@ -226,7 +226,7 @@ type ConfidentialClientTokenProviderConfig struct {
 // The above call returns to you a fully constructed TokenAPIClient that will utilize your provided install document
 // for requests that require authentication
 type ConfidentialClientTokenProvider struct {
-	*staticAuthServerURLProvider
+	staticAuthServerURLProvider
 	*staticRealmProvider
 	mu sync.RWMutex
 
@@ -273,7 +273,7 @@ func NewConfidentialClientTokenProvider(conf *ConfidentialClientTokenProviderCon
 		expiryMargin = conf.ExpiryMargin
 	}
 
-	tp.staticAuthServerURLProvider = NewAuthServerURLProvider(id.AuthServerURL).(*staticAuthServerURLProvider)
+	tp.staticAuthServerURLProvider = NewAuthServerURLProvider(id.AuthServerURL).(staticAuthServerURLProvider)
 	tp.staticRealmProvider = NewRealmProvider(id.Realm, 24*time.Hour).(*staticRealmProvider)
 
 	tp.clientID = id.Resource
@@ -364,7 +364,7 @@ func (tp *ConfidentialClientTokenProvider) Renew(ctx context.Context, client *To
 // expiration window, it will call RefreshToken before attempting to set the context token value.
 func (tp *ConfidentialClientTokenProvider) Current() (string, error) {
 	tp.mu.RLock()
-	defer tp.mu.Unlock()
+	defer tp.mu.RUnlock()
 	if tp.expired() {
 		return "", ErrTokenExpired
 	}

@@ -46,7 +46,6 @@ const (
 	httpHeaderLocationKey               = "Location"
 
 	// permissions params
-	paramResponseMode  = "response_mode"
 	paramTokenTypeHint = "token_type_hint"
 	paramTypeToken     = "token"
 

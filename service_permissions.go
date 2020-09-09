@@ -28,11 +28,13 @@ func (ps *PermissionsService) Evaluate(ctx context.Context, req *OpenIDConnectTo
 		resp  *http.Response
 		perms EvaluatedPermissions
 		err   error
+
+		mode = UMA2ResponseModePermissions
 	)
+	req.ResponseMode = &mode
 	if body, err = query.Values(req); err != nil {
 		return nil, fmt.Errorf("error encoding request: %w", err)
 	}
-	body.Set(paramResponseMode, UMA2ResponseModePermissions)
 	resp, err = ps.tc.Call(
 		ctx,
 		http.MethodPost,
@@ -57,11 +59,12 @@ func (ps *PermissionsService) Decide(ctx context.Context, req *OpenIDConnectToke
 		err  error
 
 		decision = new(respT)
+		mode     = UMA2ResponseModeDecision
 	)
+	req.ResponseMode = &mode
 	if body, err = query.Values(req); err != nil {
 		return false, fmt.Errorf("error encoding request: %w", err)
 	}
-	body.Set(paramResponseMode, UMA2ResponseModeDecision)
 	resp, err = ps.tc.callRealms(
 		ctx,
 		http.MethodPost,
@@ -76,6 +79,7 @@ func (ps *PermissionsService) Decide(ctx context.Context, req *OpenIDConnectToke
 
 // RequestingPartyToken will attempt to automatically decode and validate a RPT returned from an OIDC token request
 func (ps *PermissionsService) RequestingPartyToken(ctx context.Context, req *OpenIDConnectTokenRequest, claimsType jwt.Claims, mutators ...RequestMutator) (*jwt.Token, error) {
+	req.ResponseMode = nil
 	resp, err := ps.tc.OpenIDConnectToken(ctx, req, mutators...)
 	if err != nil {
 		return nil, err

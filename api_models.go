@@ -295,6 +295,9 @@ type OpenIDConnectTokenRequest struct {
 	// Permission [optional] - Evaluate specific access to a resource and scope
 	Permissions []PermissionRequestPermission `json:"permission,omitempty" url:"permission,omitempty"`
 
+	// ResponseMode [optional] - Used in some uma2 token workflows
+	ResponseMode *string `json:"response_mode,omitempty" url:"response_mode,omitempty"`
+
 	// ResponseIncludeResourceName [optional]
 	ResponseIncludeResourceName *bool `json:"response_include_resource_name,omitempty" url:"response_include_resource_name,omitempty"`
 
