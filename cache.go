@@ -3,6 +3,7 @@ package keycloak
 import (
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/dcarbone/sclg/v3"
@@ -24,6 +25,45 @@ func init() {
 	conf := new(sclg.TimedCacheConfig)
 	conf.Comparator = globalCacheEquivalencyTest
 	globalCache = sclg.NewTimedCache(conf)
+}
+
+type noopCacheImpl struct{}
+
+var noopCacheInst = noopCacheImpl{}
+
+// NewNoopCache will return to you a cache instance that will entirely disable all caching within the client.
+func NewNoopCache() CacheBackend {
+	return noopCacheInst
+}
+
+func (noopCacheImpl) Load(_ interface{}) (interface{}, bool)   { return nil, false }
+func (noopCacheImpl) StoreUntil(_, _ interface{}, _ time.Time) {}
+func (noopCacheImpl) Delete(_ interface{})                     {}
+func (noopCacheImpl) Flush() int                               { return 0 }
+
+type persistentCacheImpl struct {
+	*sync.Map
+}
+
+// NewPersistentCache returns a CacheBackend implementation that stores items indefinitely until explicitly deleted.
+func NewPersistentCache() CacheBackend {
+	cb := new(persistentCacheImpl)
+	cb.Map = new(sync.Map)
+	return cb
+}
+
+func (p *persistentCacheImpl) StoreUntil(key, value interface{}, _ time.Time) {
+	p.Store(key, value)
+}
+
+func (p *persistentCacheImpl) Flush() int {
+	cnt := 0
+	p.Range(func(key, _ interface{}) bool {
+		p.Delete(key)
+		cnt++
+		return true
+	})
+	return cnt
 }
 
 func globalCacheEquivalencyTest(_, current, new interface{}) bool {

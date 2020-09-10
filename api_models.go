@@ -277,7 +277,7 @@ type OpenIDConnectTokenRequest struct {
 	// Audience [optional] - Specific client to request permission for
 	Audience string `json:"audience,omitempty" url:"audience,omitempty"`
 
-	// Ticket [optional] - Evaluate based on existing permission ticket
+	// Ticket [optional] - PermissionEvaluation based on existing permission ticket
 	Ticket string `json:"ticket,omitempty" url:"ticket,omitempty"`
 
 	// ClaimToken [optional] - Additional claims to be considered by the server
@@ -292,7 +292,7 @@ type OpenIDConnectTokenRequest struct {
 	// RequestingPartyToken [optional] - Existing RPT whose permissions should be evaluated and added in a new one
 	RequestingPartyToken string `json:"rpt,omitempty" url:"rpt,omitempty"`
 
-	// Permission [optional] - Evaluate specific access to a resource and scope
+	// Permission [optional] - PermissionEvaluation specific access to a resource and scope
 	Permissions []PermissionRequestPermission `json:"permission,omitempty" url:"permission,omitempty"`
 
 	// ResponseMode [optional] - Used in some uma2 token workflows
@@ -343,6 +343,10 @@ type OpenIDConnectToken struct {
 	IdToken          string `json:"id_token"`
 	NotBeforePolicy  int    `json:"not-before-policy"`
 	SessionState     string `json:"session_state"`
+}
+
+type PermissionDecisionResponse struct {
+	Result bool `json:"result"`
 }
 
 type TokenIntrospectionResultsPermission struct {

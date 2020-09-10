@@ -58,21 +58,27 @@ func CompileAPIClientConfig(provided *APIClientConfig, mutators ...ConfigMutator
 
 	// to ensure we have something resembling a usable config...
 
-	// auth server url stuff
 	if provided.AuthServerURLProvider != nil {
 		actual.AuthServerURLProvider = provided.AuthServerURLProvider
 	}
-
+	if provided.RealmProvider != nil {
+		actual.RealmProvider = provided.RealmProvider
+	}
+	if provided.BearerTokenProvider != nil {
+		actual.BearerTokenProvider = provided.BearerTokenProvider
+	}
+	if provided.RealmEnvironmentProvider != nil {
+		actual.RealmEnvironmentProvider = provided.RealmEnvironmentProvider
+	}
+	if provided.CacheBackend != nil {
+		actual.CacheBackend = provided.CacheBackend
+	}
 	if len(provided.TokenParsers) > 0 {
 		actual.TokenParsers = provided.TokenParsers
 	}
-
-	// misc clients
 	if provided.HTTPClient != nil {
 		actual.HTTPClient = provided.HTTPClient
 	}
-
-	// debug options
 	actual.Debug = provided.Debug
 
 	return actual
@@ -148,12 +154,4 @@ func appendRequestMutators(root []RequestMutator, m ...RequestMutator) []Request
 		root = make([]RequestMutator, 0)
 	}
 	return append(root, m...)
-}
-
-func ensureEnvVar(varName string) string {
-	v := strings.TrimSpace(varName)
-	if v == "" {
-		panic(fmt.Sprintf("environment variable %q is empty or undefined", varName))
-	}
-	return v
 }

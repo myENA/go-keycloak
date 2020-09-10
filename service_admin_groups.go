@@ -8,12 +8,12 @@ import (
 )
 
 type AdminGroupsService struct {
-	tc *AdminTokenAPIClient
+	c *AdminAPIClient
 }
 
-func (tc *AdminTokenAPIClient) GroupsService() *AdminGroupsService {
+func (c *AdminAPIClient) GroupsService() *AdminGroupsService {
 	gs := new(AdminGroupsService)
-	gs.tc = tc
+	gs.c = c
 	return gs
 }
 
@@ -25,7 +25,7 @@ func (gs *AdminGroupsService) List(ctx context.Context, search string, first, ma
 		groups Groups
 		err    error
 	)
-	resp, err = gs.tc.callAdminRealms(
+	resp, err = gs.c.callAdminRealms(
 		ctx,
 		http.MethodGet,
 		kcPathPartGroups,
@@ -56,7 +56,7 @@ func (gs *AdminGroupsService) Count(ctx context.Context, search string, top bool
 			Count int `json:"count"`
 		})
 	)
-	resp, err = gs.tc.callAdminRealms(
+	resp, err = gs.c.callAdminRealms(
 		ctx,
 		http.MethodGet,
 		path.Join(kcPathPartGroups, kcPathPartCount),
@@ -80,7 +80,7 @@ func (gs *AdminGroupsService) Get(ctx context.Context, groupID string, mutators 
 		group *Group
 		err   error
 	)
-	resp, err = gs.tc.callAdminRealms(ctx, http.MethodGet, path.Join(kcPathPartGroups, groupID), nil, mutators...)
+	resp, err = gs.c.callAdminRealms(ctx, http.MethodGet, path.Join(kcPathPartGroups, groupID), nil, mutators...)
 	group = new(Group)
 	if err = handleResponse(resp, http.StatusOK, group, err); err != nil {
 		return nil, err
@@ -96,7 +96,7 @@ func (gs *AdminGroupsService) Members(ctx context.Context, groupID string, mutat
 		members Users
 		err     error
 	)
-	resp, err = gs.tc.callAdminRealms(ctx, http.MethodGet, path.Join(kcPathPartGroups, groupID, kcPathPartMembers), nil, mutators...)
+	resp, err = gs.c.callAdminRealms(ctx, http.MethodGet, path.Join(kcPathPartGroups, groupID, kcPathPartMembers), nil, mutators...)
 	members = make(Users, 0)
 	if err = handleResponse(resp, http.StatusOK, &members, err); err != nil {
 		return nil, err
@@ -110,7 +110,7 @@ func (gs *AdminGroupsService) Create(ctx context.Context, group GroupCreate, mut
 		resp *http.Response
 		err  error
 	)
-	resp, err = gs.tc.callAdminRealms(ctx, http.MethodPost, kcPathPartClients, group, mutators...)
+	resp, err = gs.c.callAdminRealms(ctx, http.MethodPost, kcPathPartClients, group, mutators...)
 	if err = handleResponse(resp, http.StatusOK, nil, err); err != nil {
 		return nil, err
 	}
@@ -119,12 +119,12 @@ func (gs *AdminGroupsService) Create(ctx context.Context, group GroupCreate, mut
 
 // Delete attempts to delete a group from
 func (gs *AdminGroupsService) Delete(ctx context.Context, groupID string, mutators ...RequestMutator) error {
-	resp, err := gs.tc.callAdminRealms(ctx, http.MethodDelete, path.Join(kcPathPartGroups, groupID), nil, mutators...)
+	resp, err := gs.c.callAdminRealms(ctx, http.MethodDelete, path.Join(kcPathPartGroups, groupID), nil, mutators...)
 	return handleResponse(resp, http.StatusOK, nil, err)
 }
 
 // Update attempts to push updated values for a specific group to
 func (gs *AdminGroupsService) Update(ctx context.Context, groupID string, group Group, mutators ...RequestMutator) error {
-	resp, err := gs.tc.callAdminRealms(ctx, http.MethodPut, path.Join(kcPathPartGroups, groupID), group, mutators...)
+	resp, err := gs.c.callAdminRealms(ctx, http.MethodPut, path.Join(kcPathPartGroups, groupID), group, mutators...)
 	return handleResponse(resp, http.StatusOK, nil, err)
 }
