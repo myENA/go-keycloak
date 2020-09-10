@@ -48,9 +48,6 @@ func (tp *X509TokenParser) Parse(ctx context.Context, client *TokenAPIClient, to
 		realmName     = client.RealmName()
 	)
 
-	if client == nil {
-		return nil, errors.New("client is nil")
-	}
 	if token == nil {
 		return nil, errors.New("token is nil")
 	}

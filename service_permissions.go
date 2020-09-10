@@ -22,7 +22,7 @@ func (tc *TokenAPIClient) PermissionsService() *PermissionsService {
 }
 
 // Evaluate will return an array of permissions granted by the server
-func (ps *PermissionsService) Evaluate(ctx context.Context, req *OpenIDConnectTokenRequest) (EvaluatedPermissions, error) {
+func (ps *PermissionsService) Evaluate(ctx context.Context, req *OpenIDConnectTokenRequest, mutators ...RequestMutator) (EvaluatedPermissions, error) {
 	var (
 		body  url.Values
 		resp  *http.Response
@@ -40,7 +40,7 @@ func (ps *PermissionsService) Evaluate(ctx context.Context, req *OpenIDConnectTo
 		http.MethodPost,
 		ps.tc.realmEnv.TokenEndpoint(),
 		strings.NewReader(body.Encode()),
-		HeaderMutator(httpHeaderContentType, httpHeaderValueFormURLEncoded, true))
+		appendRequestMutators(mutators, HeaderMutator(httpHeaderContentType, httpHeaderValueFormURLEncoded, true))...)
 	perms = make(EvaluatedPermissions, 0)
 	if err = handleResponse(resp, http.StatusOK, &perms, err); err != nil {
 		return nil, err
@@ -49,7 +49,7 @@ func (ps *PermissionsService) Evaluate(ctx context.Context, req *OpenIDConnectTo
 }
 
 // Decide can be used to determine whether a bearer token is allowed the permission requested
-func (ps *PermissionsService) Decide(ctx context.Context, req *OpenIDConnectTokenRequest) (bool, error) {
+func (ps *PermissionsService) Decide(ctx context.Context, req *OpenIDConnectTokenRequest, mutators ...RequestMutator) (bool, error) {
 	type respT struct {
 		Result bool `json:"result"`
 	}
@@ -70,7 +70,7 @@ func (ps *PermissionsService) Decide(ctx context.Context, req *OpenIDConnectToke
 		http.MethodPost,
 		ps.tc.realmEnv.TokenEndpoint(),
 		strings.NewReader(body.Encode()),
-		HeaderMutator(httpHeaderContentType, httpHeaderValueFormURLEncoded, true))
+		appendRequestMutators(mutators, HeaderMutator(httpHeaderContentType, httpHeaderValueFormURLEncoded, true))...)
 	if err = handleResponse(resp, http.StatusOK, decision, err); err != nil {
 		return false, err
 	}

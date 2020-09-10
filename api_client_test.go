@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/myENA/go-keycloak/v2"
-	"github.com/rs/zerolog"
 )
 
 const (
@@ -24,11 +23,15 @@ type testConfig struct {
 	ClientID        string                    `json:"client_id"`
 	BearerToken     string                    `json:"bearer_token"`
 	InstallDocument *keycloak.InstallDocument `json:"install_document"`
-	Logging         struct {
-		Enabled bool          `json:"enabled"`
-		Level   zerolog.Level `json:"level"`
-		Out     string        `json:"out"`
-	} `json:"logging"`
+	PermissionTests []struct {
+		Strategy               string `json:"strategy"`
+		Audience               string `json:"audience"`
+		ExpectedDecisionResult bool   `json:"expected_decision_result"`
+		Permissions            []struct {
+			Resource string `json:"resource"`
+			Scope    string `json:"scope"`
+		}
+	}
 }
 
 func getConfig(t *testing.T) *testConfig {
@@ -76,10 +79,6 @@ func getConfig(t *testing.T) *testConfig {
 		t.Log("Issuer key empty in config")
 		t.FailNow()
 		return nil
-	}
-
-	if conf.Logging.Out == "" {
-		conf.Logging.Out = "stdout"
 	}
 
 	return conf
@@ -309,4 +308,27 @@ func TestConfidentialClientTokenProvider(t *testing.T) {
 		t.FailNow()
 		return
 	}
+}
+
+func TestPermissionsService(t *testing.T) {
+	t.Parallel()
+	conf := getConfig(t)
+
+	t.Run("with-bearer", func(t *testing.T) {
+		tc := newBearerTokenClient(t, conf)
+		if tc == nil {
+			return
+		}
+	})
+
+	t.Run("with-confidential", func(t *testing.T) {
+		tc := newConfidentialClientTokenClient(t, conf)
+		if tc == nil {
+			if !t.Failed() {
+				t.Skip("No install document configured")
+				return
+			}
+		}
+
+	})
 }
