@@ -31,7 +31,8 @@ type noopCacheImpl struct{}
 
 var noopCacheInst = noopCacheImpl{}
 
-// NewNoopCache will return to you a cache instance that will entirely disable all caching within the client.
+// NewNoopCache will return to you a cache instance that will entirely disable all caching within the client. Not
+// recommended for production use
 func NewNoopCache() CacheBackend {
 	return noopCacheInst
 }
@@ -45,7 +46,8 @@ type persistentCacheImpl struct {
 	*sync.Map
 }
 
-// NewPersistentCache returns a CacheBackend implementation that stores items indefinitely until explicitly deleted.
+// NewPersistentCache returns a CacheBackend implementation that stores items indefinitely until explicitly deleted. Not
+// recommended for production use.
 func NewPersistentCache() CacheBackend {
 	cb := new(persistentCacheImpl)
 	cb.Map = new(sync.Map)
