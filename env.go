@@ -7,6 +7,35 @@ import (
 	"time"
 )
 
+// RealmEnvironmentProvider
+type RealmEnvironmentProvider interface {
+	RealmEnvironment(ctx context.Context, client *APIClient) (*RealmEnvironment, error)
+}
+
+var (
+	realmEnvProviderMu sync.RWMutex
+	realmEnvProvider   RealmEnvironmentProvider
+)
+
+func init() {
+	realmEnvProvider = NewDefaultRealmEnvironmentProvider(time.Hour)
+}
+
+func SetRealmEnvironmentProvider(prov RealmEnvironmentProvider) {
+	realmEnvProviderMu.Lock()
+	defer realmEnvProviderMu.Unlock()
+	if prov == nil {
+		panic("prov cannot be nil")
+	}
+	realmEnvProvider = prov
+}
+
+func GetRealmEnvironment(ctx context.Context, client *APIClient) (*RealmEnvironment, error) {
+	realmEnvProviderMu.RLock()
+	defer realmEnvProviderMu.RUnlock()
+	return realmEnvProvider.RealmEnvironment(ctx, client)
+}
+
 func buildRealmEnvironment(ctx context.Context, client *APIClient) (*RealmEnvironment, error) {
 	var err error
 	// if we land here, we're the one to build the cache entry
@@ -20,57 +49,19 @@ func buildRealmEnvironment(ctx context.Context, client *APIClient) (*RealmEnviro
 	return env, nil
 }
 
-// RealmEnvironmentProvider
-type RealmEnvironmentProvider interface {
-	RealmEnvironment(ctx context.Context, client *APIClient) (*RealmEnvironment, error)
-}
-
-type OnceRealmEnvironmentProvider struct {
-	mu  sync.RWMutex
-	env *RealmEnvironment
-}
-
-func NewOnceRealmEnvironmentProvider() *OnceRealmEnvironmentProvider {
-	rp := new(OnceRealmEnvironmentProvider)
-	return rp
-}
-
-func (rp *OnceRealmEnvironmentProvider) RealmEnvironment(ctx context.Context, client *APIClient) (*RealmEnvironment, error) {
-	rp.mu.RLock()
-	// first, check to see if env config already retrieved
-	if rp.env != nil {
-		// if so, unlock and return
-		defer rp.mu.RUnlock()
-		return rp.env, nil
-	}
-	// otherwise, acquire full lock
-	rp.mu.RUnlock()
-	rp.mu.Lock()
-	defer rp.mu.Unlock()
-	// test for env being nil as its possible another process already acquired full lock and retrieved between the above
-	// runlock -> lock cycle
-	if rp.env == nil {
-		var err error
-		if rp.env, err = buildRealmEnvironment(ctx, client); err != nil {
-			return nil, err
-		}
-	}
-	return rp.env, nil
-}
-
-type CachedRealmEnvironmentProvider struct {
+type DefaultRealmEnvironmentProvider struct {
 	mu          sync.RWMutex
 	envCacheTTL time.Duration
 }
 
-// NewCachedRealmEnvironmentProvider will return to you a type of RealmEnvironmentProvider that, given that the incoming context does not
+// NewDefaultRealmEnvironmentProvider will return to you a type of RealmEnvironmentProvider that, given that the incoming context does not
 // already have a realm defined, will always set it to the value provided to this constructor
-func NewCachedRealmEnvironmentProvider(envCacheTTL time.Duration) *CachedRealmEnvironmentProvider {
-	return &CachedRealmEnvironmentProvider{envCacheTTL: envCacheTTL}
+func NewDefaultRealmEnvironmentProvider(envCacheTTL time.Duration) *DefaultRealmEnvironmentProvider {
+	return &DefaultRealmEnvironmentProvider{envCacheTTL: envCacheTTL}
 }
 
 // EnvironmentConfig attempts to construct
-func (rp *CachedRealmEnvironmentProvider) RealmEnvironment(ctx context.Context, client *APIClient) (*RealmEnvironment, error) {
+func (rp *DefaultRealmEnvironmentProvider) RealmEnvironment(ctx context.Context, client *APIClient) (*RealmEnvironment, error) {
 	var (
 		v   interface{}
 		ok  bool

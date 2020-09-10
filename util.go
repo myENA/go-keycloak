@@ -67,9 +67,6 @@ func CompileAPIClientConfig(provided *APIClientConfig, mutators ...ConfigMutator
 	if provided.BearerTokenProvider != nil {
 		actual.BearerTokenProvider = provided.BearerTokenProvider
 	}
-	if provided.RealmEnvironmentProvider != nil {
-		actual.RealmEnvironmentProvider = provided.RealmEnvironmentProvider
-	}
 	if provided.CacheBackend != nil {
 		actual.CacheBackend = provided.CacheBackend
 	}

@@ -8,7 +8,6 @@ import (
 	"net/url"
 	"path"
 	"strings"
-	"time"
 
 	"github.com/dgrijalva/jwt-go"
 	"github.com/google/go-querystring/query"
@@ -105,11 +104,6 @@ type APIClientConfig struct {
 	// This is only required if you wish to execute queries against endpoints that require authentication.
 	BearerTokenProvider BearerTokenProvider
 
-	// RealmEnvironmentProvider [optional]
-	//
-	// This provides the built client with environment details about the target keycloak realm for this client
-	RealmEnvironmentProvider RealmEnvironmentProvider
-
 	// CacheBackend [optional]
 	//
 	// Optionally provide your own cache implementation.  This cache is used, by default, for realm environment and
@@ -130,12 +124,11 @@ type APIClientConfig struct {
 
 func DefaultAPIClientConfig() *APIClientConfig {
 	c := APIClientConfig{
-		AuthServerURLProvider:    defaultAuthServerURLProvider(),
-		RealmProvider:            NewStaticRealmProvider("master"),
-		RealmEnvironmentProvider: NewCachedRealmEnvironmentProvider(time.Hour),
-		CacheBackend:             globalCache,
-		HTTPClient:               cleanhttp.DefaultClient(),
-		Debug:                    new(DebugConfig),
+		AuthServerURLProvider: defaultAuthServerURLProvider(),
+		RealmProvider:         NewStaticRealmProvider("master"),
+		CacheBackend:          globalCache,
+		HTTPClient:            cleanhttp.DefaultClient(),
+		Debug:                 new(DebugConfig),
 	}
 	return &c
 }
@@ -153,7 +146,6 @@ type APIClient struct {
 	realmName string
 
 	btp BearerTokenProvider
-	rep RealmEnvironmentProvider
 }
 
 // NewAPIClient will attempt to construct and return a APIClient to you
@@ -180,7 +172,6 @@ func NewAPIClient(config *APIClientConfig, mutators ...ConfigMutator) (*APIClien
 	cl.cache = cc.CacheBackend
 	cl.hc = cc.HTTPClient
 	cl.mr = buildRequestMutatorRunner(cc.Debug)
-	cl.rep = cc.RealmEnvironmentProvider
 	cl.btp = cc.BearerTokenProvider
 
 	return cl, nil
@@ -238,10 +229,7 @@ func (c *APIClient) CacheBackend() CacheBackend {
 }
 
 func (c *APIClient) RealmEnvironment(ctx context.Context) (*RealmEnvironment, error) {
-	if c.rep == nil {
-		return nil, errors.New("no realm environment provider configured with client")
-	}
-	return c.rep.RealmEnvironment(ctx, c)
+	return GetRealmEnvironment(ctx, c)
 }
 
 func (c *APIClient) BearerTokenProvider() (BearerTokenProvider, error) {
