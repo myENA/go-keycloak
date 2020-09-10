@@ -8,7 +8,6 @@ import (
 	"net/url"
 	"path"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/dgrijalva/jwt-go"
@@ -111,11 +110,6 @@ type APIClientConfig struct {
 	// This provides the built client with environment details about the target keycloak realm for this client
 	RealmEnvironmentProvider RealmEnvironmentProvider
 
-	// TokenParsers [required]
-	//
-	// List of token parser implementations to support with this client.
-	TokenParsers []TokenParser
-
 	// CacheBackend [optional]
 	//
 	// Optionally provide your own cache implementation.  This cache is used, by default, for realm environment and
@@ -140,7 +134,6 @@ func DefaultAPIClientConfig() *APIClientConfig {
 		RealmProvider:            NewStaticRealmProvider("master"),
 		RealmEnvironmentProvider: NewCachedRealmEnvironmentProvider(time.Hour),
 		CacheBackend:             globalCache,
-		TokenParsers:             []TokenParser{NewX509TokenParser(time.Hour)},
 		HTTPClient:               cleanhttp.DefaultClient(),
 		Debug:                    new(DebugConfig),
 	}
@@ -161,9 +154,6 @@ type APIClient struct {
 
 	btp BearerTokenProvider
 	rep RealmEnvironmentProvider
-
-	tokenParsers   map[string]TokenParser
-	tokenParsersMu sync.RWMutex
 }
 
 // NewAPIClient will attempt to construct and return a APIClient to you
@@ -187,13 +177,7 @@ func NewAPIClient(config *APIClientConfig, mutators ...ConfigMutator) (*APIClien
 		return nil, err
 	}
 
-	if len(cc.TokenParsers) == 0 {
-		return nil, errors.New("must provide at least one token parser")
-	}
-
 	cl.cache = cc.CacheBackend
-	cl.tokenParsers = make(map[string]TokenParser)
-	cl.RegisterTokenParsers(cc.TokenParsers...)
 	cl.hc = cc.HTTPClient
 	cl.mr = buildRequestMutatorRunner(cc.Debug)
 	cl.rep = cc.RealmEnvironmentProvider
@@ -202,9 +186,9 @@ func NewAPIClient(config *APIClientConfig, mutators ...ConfigMutator) (*APIClien
 	return cl, nil
 }
 
-// NewClientWithProvider will construct a new APIClient using a combined provider, such as a
+// NewAPIClientWithProvider will construct a new APIClient using a combined provider, such as a
 // ConfidentialClientTokenProvider
-func NewClientWithProvider(cp CombinedProvider, mutators ...ConfigMutator) (*APIClient, error) {
+func NewAPIClientWithProvider(cp CombinedProvider, mutators ...ConfigMutator) (*APIClient, error) {
 	conf := DefaultAPIClientConfig()
 	conf.AuthServerURLProvider = cp
 	conf.RealmProvider = cp
@@ -212,18 +196,18 @@ func NewClientWithProvider(cp CombinedProvider, mutators ...ConfigMutator) (*API
 	return NewAPIClient(conf, mutators...)
 }
 
-// NewClientWithInstallDocument will construct an APIClient from an InstallDocument
-func NewClientWithInstallDocument(id *InstallDocument, mutators ...ConfigMutator) (*APIClient, error) {
+// NewAPIClientWithInstallDocument will construct an APIClient from an InstallDocument
+func NewAPIClientWithInstallDocument(id *InstallDocument, mutators ...ConfigMutator) (*APIClient, error) {
 	// todo: support ID's for things other than a confidential client
 	ctp, err := NewConfidentialClientTokenProvider(&ConfidentialClientTokenProviderConfig{InstallDocument: id})
 	if err != nil {
 		return nil, err
 	}
-	return NewClientWithProvider(ctp, mutators...)
+	return NewAPIClientWithProvider(ctp, mutators...)
 }
 
-// NewClientWithBearerToken will construct a new APIClient with a bearer token
-func NewClientWithBearerToken(token string, mutators ...ConfigMutator) (*APIClient, error) {
+// NewAPIClientWithBearerToken will construct a new APIClient with a bearer token
+func NewAPIClientWithBearerToken(token string, mutators ...ConfigMutator) (*APIClient, error) {
 	claims := new(StandardClaims)
 	_, _, err := (new(jwt.Parser)).ParseUnverified(token, claims)
 	if err != nil {
@@ -251,23 +235,6 @@ func (c *APIClient) RealmName() string {
 
 func (c *APIClient) CacheBackend() CacheBackend {
 	return c.cache
-}
-
-func (c *APIClient) TokenParser(alg string) (TokenParser, bool) {
-	c.tokenParsersMu.RLock()
-	defer c.tokenParsersMu.RUnlock()
-	tp, ok := c.tokenParsers[alg]
-	return tp, ok
-}
-
-func (c *APIClient) RegisterTokenParsers(tps ...TokenParser) {
-	c.tokenParsersMu.Lock()
-	defer c.tokenParsersMu.Unlock()
-	for _, tp := range tps {
-		for _, alg := range tp.SupportedAlgorithms() {
-			c.tokenParsers[alg] = tp
-		}
-	}
 }
 
 func (c *APIClient) RealmEnvironment(ctx context.Context) (*RealmEnvironment, error) {
@@ -476,7 +443,7 @@ func (c *APIClient) keyFunc(ctx context.Context) jwt.Keyfunc {
 			tp TokenParser
 			ok bool
 		)
-		if tp, ok = c.TokenParser(token.Method.Alg()); !ok {
+		if tp, ok = GetTokenParser(token.Method.Alg()); !ok {
 			return nil, fmt.Errorf("no token parser registered to handle %q", token.Method.Alg())
 		}
 		return tp.Parse(ctx, c, token)
@@ -545,7 +512,7 @@ func NewAdminAPIClient(config *APIClientConfig, mutators ...ConfigMutator) (*Adm
 }
 
 func NewAdminClientWithProvider(cp CombinedProvider, mutators ...ConfigMutator) (*AdminAPIClient, error) {
-	c, err := NewClientWithProvider(cp)
+	c, err := NewAPIClientWithProvider(cp)
 	if err != nil {
 		return nil, err
 	}
@@ -553,7 +520,7 @@ func NewAdminClientWithProvider(cp CombinedProvider, mutators ...ConfigMutator) 
 }
 
 func NewAdminClientWithInstallDocument(id *InstallDocument, mutators ...ConfigMutator) (*AdminAPIClient, error) {
-	c, err := NewClientWithInstallDocument(id, mutators...)
+	c, err := NewAPIClientWithInstallDocument(id, mutators...)
 	if err != nil {
 		return nil, err
 	}

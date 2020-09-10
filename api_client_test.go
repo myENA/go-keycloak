@@ -114,9 +114,9 @@ func newClient(t *testing.T, testConfig *testConfig, mutators ...keycloak.Config
 
 	if testConfig.ClientConfig.Cred != nil {
 		if testConfig.ClientConfig.Cred.BearerToken != "" {
-			cl, err = keycloak.NewClientWithBearerToken(testConfig.ClientConfig.Cred.BearerToken)
+			cl, err = keycloak.NewAPIClientWithBearerToken(testConfig.ClientConfig.Cred.BearerToken)
 		} else if testConfig.ClientConfig.Cred.InstallDocument != nil {
-			cl, err = keycloak.NewClientWithInstallDocument(testConfig.ClientConfig.Cred.InstallDocument)
+			cl, err = keycloak.NewAPIClientWithInstallDocument(testConfig.ClientConfig.Cred.InstallDocument)
 		} else {
 			t.Logf("Test %q does not have usable cred defined", testConfig.Name)
 			t.FailNow()

@@ -73,9 +73,6 @@ func CompileAPIClientConfig(provided *APIClientConfig, mutators ...ConfigMutator
 	if provided.CacheBackend != nil {
 		actual.CacheBackend = provided.CacheBackend
 	}
-	if len(provided.TokenParsers) > 0 {
-		actual.TokenParsers = provided.TokenParsers
-	}
 	if provided.HTTPClient != nil {
 		actual.HTTPClient = provided.HTTPClient
 	}

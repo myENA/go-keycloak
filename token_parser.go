@@ -21,6 +21,33 @@ type TokenParser interface {
 	SupportedAlgorithms() []string
 }
 
+var (
+	tokenParsersMu sync.RWMutex
+	tokenParsers   map[string]TokenParser
+)
+
+func init() {
+	tokenParsers = make(map[string]TokenParser)
+	RegisterTokenParsers(NewX509TokenParser(time.Hour))
+}
+
+func RegisterTokenParsers(parsers ...TokenParser) {
+	tokenParsersMu.Lock()
+	defer tokenParsersMu.Unlock()
+	for _, parser := range parsers {
+		for _, alg := range parser.SupportedAlgorithms() {
+			tokenParsers[alg] = parser
+		}
+	}
+}
+
+func GetTokenParser(alg string) (TokenParser, bool) {
+	tokenParsersMu.RLock()
+	tokenParsersMu.RUnlock()
+	parser, ok := tokenParsers[alg]
+	return parser, ok
+}
+
 type X509TokenParser struct {
 	mu   sync.RWMutex
 	dttl time.Duration
