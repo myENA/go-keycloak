@@ -16,7 +16,7 @@ func (c *AdminAPIClient) RolesService() *AdminRolesService {
 	return rs
 }
 
-func (rs *AdminRolesService) List(ctx context.Context, mutators ...RequestMutator) (Roles, error) {
+func (rs *AdminRolesService) List(ctx context.Context, mutators ...APIRequestMutator) (Roles, error) {
 	var (
 		resp  *http.Response
 		roles Roles
@@ -30,7 +30,7 @@ func (rs *AdminRolesService) List(ctx context.Context, mutators ...RequestMutato
 	return roles, nil
 }
 
-func (rs *AdminRolesService) Create(ctx context.Context, role *Role, mutators ...RequestMutator) ([]string, error) {
+func (rs *AdminRolesService) Create(ctx context.Context, role *Role, mutators ...APIRequestMutator) ([]string, error) {
 	var (
 		resp *http.Response
 		err  error
@@ -42,7 +42,7 @@ func (rs *AdminRolesService) Create(ctx context.Context, role *Role, mutators ..
 	return parseResponseLocations(resp)
 }
 
-func (rs *AdminRolesService) Get(ctx context.Context, roleName string, mutators ...RequestMutator) (*Role, error) {
+func (rs *AdminRolesService) Get(ctx context.Context, roleName string, mutators ...APIRequestMutator) (*Role, error) {
 	var (
 		resp *http.Response
 		role *Role
@@ -56,12 +56,12 @@ func (rs *AdminRolesService) Get(ctx context.Context, roleName string, mutators 
 	return role, nil
 }
 
-func (rs *AdminRolesService) Update(ctx context.Context, roleName string, role *Role, mutators ...RequestMutator) error {
+func (rs *AdminRolesService) Update(ctx context.Context, roleName string, role *Role, mutators ...APIRequestMutator) error {
 	resp, err := rs.c.callAdminRealms(ctx, http.MethodPut, path.Join(kcPathPartRoles, roleName), role, mutators...)
 	return handleResponse(resp, http.StatusOK, nil, err)
 }
 
-func (rs *AdminRolesService) Delete(ctx context.Context, roleName string, mutators ...RequestMutator) error {
+func (rs *AdminRolesService) Delete(ctx context.Context, roleName string, mutators ...APIRequestMutator) error {
 	resp, err := rs.c.callAdminRealms(ctx, http.MethodDelete, path.Join(kcPathPartRoles, roleName), nil, mutators...)
 	return handleResponse(resp, http.StatusOK, nil, err)
 }
@@ -82,7 +82,7 @@ func (rs *AdminRolesService) CompositesService(roleName string) *AdminRoleCompos
 	return rs.c.RoleCompositesService(roleName)
 }
 
-func (rcs *AdminRoleCompositesService) List(ctx context.Context, mutators ...RequestMutator) (Roles, error) {
+func (rcs *AdminRoleCompositesService) List(ctx context.Context, mutators ...APIRequestMutator) (Roles, error) {
 	var (
 		resp  *http.Response
 		roles Roles
@@ -96,17 +96,17 @@ func (rcs *AdminRoleCompositesService) List(ctx context.Context, mutators ...Req
 	return roles, nil
 }
 
-func (rcs *AdminRoleCompositesService) Add(ctx context.Context, roles Roles, mutators ...RequestMutator) error {
+func (rcs *AdminRoleCompositesService) Add(ctx context.Context, roles Roles, mutators ...APIRequestMutator) error {
 	resp, err := rcs.c.callAdminRealms(ctx, http.MethodPost, path.Join(kcPathPartRoles, rcs.roleName, kcPathPartComposites), roles, mutators...)
 	return handleResponse(resp, http.StatusOK, nil, err)
 }
 
-func (rcs *AdminRoleCompositesService) Remove(ctx context.Context, roles Roles, mutators ...RequestMutator) error {
+func (rcs *AdminRoleCompositesService) Remove(ctx context.Context, roles Roles, mutators ...APIRequestMutator) error {
 	resp, err := rcs.c.callAdminRealms(ctx, http.MethodDelete, path.Join(kcPathPartRoles, rcs.roleName, kcPathPartComposites), roles, mutators...)
 	return handleResponse(resp, http.StatusOK, nil, err)
 }
 
-func (rcs *AdminRoleCompositesService) ClientRoles(ctx context.Context, clientName string, mutators ...RequestMutator) (Roles, error) {
+func (rcs *AdminRoleCompositesService) ClientRoles(ctx context.Context, clientName string, mutators ...APIRequestMutator) (Roles, error) {
 	var (
 		resp  *http.Response
 		roles Roles
@@ -120,7 +120,7 @@ func (rcs *AdminRoleCompositesService) ClientRoles(ctx context.Context, clientNa
 	return roles, nil
 }
 
-func (rcs *AdminRoleCompositesService) RealmRoles(ctx context.Context, mutators ...RequestMutator) (Roles, error) {
+func (rcs *AdminRoleCompositesService) RealmRoles(ctx context.Context, mutators ...APIRequestMutator) (Roles, error) {
 	var (
 		resp  *http.Response
 		roles Roles

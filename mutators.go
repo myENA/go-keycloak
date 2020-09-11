@@ -1,6 +1,7 @@
 package keycloak
 
 import (
+	"encoding/base64"
 	"fmt"
 	"reflect"
 	"strconv"
@@ -16,11 +17,11 @@ const (
 // ConfigMutator provides some flexibility when constructing an api client
 type ConfigMutator func(*APIClientConfig)
 
-// RequestMutator
+// APIRequestMutator
 //
 // This callback func type allows you to modify any *http.Request executed by the client in this package once it has
 // been built.
-type RequestMutator func(*APIRequest) error
+type APIRequestMutator func(*APIRequest) error
 
 // ValuedParameterFormatter
 //
@@ -83,8 +84,8 @@ func DefaultValuedParameterFormatter(_, _ string, v interface{}) (string, bool) 
 	return "", false
 }
 
-// QueryMutator will return a RequestMutator that either sets or adds a query parameter and value
-func QueryMutator(k, v string, override bool) RequestMutator {
+// QueryMutator will return a APIRequestMutator that either sets or adds a query parameter and value
+func QueryMutator(k, v string, override bool) APIRequestMutator {
 	return func(r *APIRequest) error {
 		if override {
 			r.SetQueryParameter(k, []string{v})
@@ -95,16 +96,16 @@ func QueryMutator(k, v string, override bool) RequestMutator {
 	}
 }
 
-// ValuedQueryMutator will return a RequestMutator only if v is a non-zero value of its type
-func ValuedQueryMutator(k string, v interface{}, override bool) RequestMutator {
+// ValuedQueryMutator will return a APIRequestMutator only if v is a non-zero value of its type
+func ValuedQueryMutator(k string, v interface{}, override bool) APIRequestMutator {
 	if sv, ok := ValuedParameterFormatter(ParameterDestinationQuery, k, v); ok {
 		return QueryMutator(k, sv, override)
 	}
 	return nil
 }
 
-// HeaderMutator returns a RequestMutator that will add or override a value in the header of the request
-func HeaderMutator(k, v string, override bool) RequestMutator {
+// HeaderMutator returns a APIRequestMutator that will add or override a value in the header of the request
+func HeaderMutator(k, v string, override bool) APIRequestMutator {
 	return func(r *APIRequest) error {
 		if override {
 			r.SetHeader(k, v)
@@ -115,33 +116,47 @@ func HeaderMutator(k, v string, override bool) RequestMutator {
 	}
 }
 
-// ValuedHeaderMutator returns a RequestMutator that will add or override a value in the header of a request, given the
+// ValuedHeaderMutator returns a APIRequestMutator that will add or override a value in the header of a request, given the
 // provided value is "valued"
-func ValuedHeaderMutator(k string, v interface{}, override bool) RequestMutator {
+func ValuedHeaderMutator(k string, v interface{}, override bool) APIRequestMutator {
 	if sv, ok := ValuedParameterFormatter(ParameterDestinationHeader, k, v); ok {
 		return HeaderMutator(k, sv, override)
 	}
 	return nil
 }
 
-func BearerTokenMutator(rawToken string) RequestMutator {
+func BearerAuthRequestMutator(rawToken string) APIRequestMutator {
 	return func(r *APIRequest) error {
 		if rawToken != "" {
-			r.SetHeader(httpHeaderAuthorization, fmt.Sprintf(httpHeaderAuthValueFormat, rawToken))
+			r.SetHeader(httpHeaderAuthorization, fmt.Sprintf(httpHeaderAuthValueFormat, httpHeaderAuthorizationBearerPrefix, rawToken))
 		}
 		return nil
 	}
 }
 
-type requestMutatorRunner func(req *APIRequest, mutators ...RequestMutator) (int, error)
+func BasicAuthRequestMutator(username, password string) APIRequestMutator {
+	return func(r *APIRequest) error {
+		r.SetHeader(
+			httpHeaderAuthorization,
+			fmt.Sprintf(
+				httpHeaderAuthValueFormat,
+				httpHeaderAuthorizationBasicPrefix,
+				base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("%s:%s", username, password))),
+			),
+		)
+		return nil
+	}
+}
 
-func baseRequestMutatorRunner(req *APIRequest, mutators ...RequestMutator) (int, error) {
+type requestMutatorRunner func(req *APIRequest, mutators ...APIRequestMutator) (int, error)
+
+func baseRequestMutatorRunner(req *APIRequest, mutators ...APIRequestMutator) (int, error) {
 	if len(mutators) == 0 {
 		return 0, nil
 	}
 	var (
 		i   int
-		m   RequestMutator
+		m   APIRequestMutator
 		err error
 	)
 	for i, m = range mutators {
@@ -157,29 +172,29 @@ func baseRequestMutatorRunner(req *APIRequest, mutators ...RequestMutator) (int,
 
 func debugRequestMutatorRunner(c *DebugConfig) requestMutatorRunner {
 	var (
-		pre       []RequestMutator
-		post      []RequestMutator
+		pre       []APIRequestMutator
+		post      []APIRequestMutator
 		staticLen int
 	)
 
 	if l := len(c.BaseRequestMutators); l > 0 {
-		pre = make([]RequestMutator, l, l)
+		pre = make([]APIRequestMutator, l, l)
 		copy(pre, c.BaseRequestMutators)
 		staticLen = l
 	}
 	if l := len(c.FinalRequestMutators); l > 0 {
-		post = make([]RequestMutator, l, l)
+		post = make([]APIRequestMutator, l, l)
 		copy(post, c.FinalRequestMutators)
 		staticLen += l
 	}
 
-	return func(req *APIRequest, mutators ...RequestMutator) (int, error) {
+	return func(req *APIRequest, mutators ...APIRequestMutator) (int, error) {
 		var (
-			m RequestMutator
+			m APIRequestMutator
 			i int
 
 			l    = staticLen + len(mutators)
-			muts = make([]RequestMutator, l, l)
+			muts = make([]APIRequestMutator, l, l)
 		)
 		for _, m = range pre {
 			muts[i] = m

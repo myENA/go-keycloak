@@ -75,39 +75,34 @@ func (rp staticRealmProvider) RealmName() (string, error) {
 	return string(rp), nil
 }
 
-type BearerTokenProvider interface {
-	BearerToken() (string, error)
+type AuthProvider interface {
+	AuthMutators(context.Context, *APIClient) ([]APIRequestMutator, error)
 }
 
-type RenewableBearerTokenProvider interface {
-	BearerTokenProvider
-	RenewBearerToken(ctx context.Context, client *APIClient, force bool) error
-}
-
-type StaticBearerTokenProvider struct {
+type BearerTokenAuthProvider struct {
 	bearerToken string
 }
 
-// NewStaticBearerTokenProvider returns a token provider implementation that returns a fixed token value.
-func NewStaticBearerTokenProvider(bearerToken string) *StaticBearerTokenProvider {
-	bt := new(StaticBearerTokenProvider)
+// NewBearerTokenAuthProvider returns a token provider implementation that returns a fixed token value.
+func NewBearerTokenAuthProvider(bearerToken string) *BearerTokenAuthProvider {
+	bt := new(BearerTokenAuthProvider)
 	bt.bearerToken = bearerToken
 	return bt
 }
 
-func (p StaticBearerTokenProvider) BearerToken() (string, error) {
-	return p.bearerToken, nil
+func (p BearerTokenAuthProvider) AuthMutators(_ context.Context, _ *APIClient) ([]APIRequestMutator, error) {
+	return []APIRequestMutator{BearerAuthRequestMutator(p.bearerToken)}, nil
 }
 
 // CombinedProvider describes any provider that can fulfill auth url, realm, and renewable bearer token roles
 type CombinedProvider interface {
 	AuthServerURLProvider
 	RealmProvider
-	BearerTokenProvider
+	AuthProvider
 }
 
-// ConfidentialClientTokenProviderConfig must be provided to a new ConfidentialClientTokenProvider upon construction
-type ConfidentialClientTokenProviderConfig struct {
+// ConfidentialClientAuthProviderConfig must be provided to a new ConfidentialClientAuthProvider upon construction
+type ConfidentialClientAuthProviderConfig struct {
 	// InstallDocument [optional]
 	//
 	// If you already have a confidential client install document handy, you may pass it in here.
@@ -119,14 +114,14 @@ type ConfidentialClientTokenProviderConfig struct {
 	ExpiryMargin time.Duration `json:"expiryMargin"`
 }
 
-// ConfidentialClientTokenProvider
+// ConfidentialClientAuthProvider
 //
 // This provider implements the TokenProviderClientAware interface, and is designed to take care of the complexity of
 // managing a confidential client token for you.
 //
 // Easiest way to implement would be the following:
 //
-//	conf := keycloak.ConfidentialClientTokenProviderConfig {
+//	conf := keycloak.ConfidentialClientAuthProviderConfig {
 //		InstallDocument: {id document}
 //	}
 //  ctx, cancel := context.WithTimeout(context.Background(), 2 * time.Second)
@@ -135,7 +130,7 @@ type ConfidentialClientTokenProviderConfig struct {
 //  if err != nil {
 // 		panic(err.Error())
 //	}
-type ConfidentialClientTokenProvider struct {
+type ConfidentialClientAuthProvider struct {
 	staticAuthServerURLProvider
 	mu sync.RWMutex
 
@@ -148,9 +143,9 @@ type ConfidentialClientTokenProvider struct {
 	tokenExpiry    int64
 }
 
-// NewConfidentialClientTokenProvider will attempt to construct a new ConfidentialClientTokenProvider for you based on
+// NewConfidentialClientAuthProvider will attempt to construct a new ConfidentialClientAuthProvider for you based on
 // the provided configuration.
-func NewConfidentialClientTokenProvider(conf *ConfidentialClientTokenProviderConfig) (*ConfidentialClientTokenProvider, error) {
+func NewConfidentialClientAuthProvider(conf *ConfidentialClientAuthProviderConfig) (*ConfidentialClientAuthProvider, error) {
 	var (
 		secret    interface{}
 		secretStr string
@@ -158,7 +153,7 @@ func NewConfidentialClientTokenProvider(conf *ConfidentialClientTokenProviderCon
 		ok        bool
 
 		expiryMargin = DefaultTokenExpirationMargin
-		tp           = new(ConfidentialClientTokenProvider)
+		tp           = new(ConfidentialClientAuthProvider)
 	)
 
 	if conf.InstallDocument == nil {
@@ -193,16 +188,16 @@ func NewConfidentialClientTokenProvider(conf *ConfidentialClientTokenProviderCon
 	return tp, nil
 }
 
-func (tp *ConfidentialClientTokenProvider) RealmName() (string, error) {
+func (tp *ConfidentialClientAuthProvider) RealmName() (string, error) {
 	return tp.realmName, nil
 }
 
-func (tp *ConfidentialClientTokenProvider) ClientID() string {
+func (tp *ConfidentialClientAuthProvider) ClientID() string {
 	return tp.clientID
 }
 
 // LastRefreshed returns a unix nano timestamp of the last time this client's bearer token was refreshed.
-func (tp *ConfidentialClientTokenProvider) LastRefreshed() int64 {
+func (tp *ConfidentialClientAuthProvider) LastRefreshed() int64 {
 	tp.mu.RLock()
 	defer tp.mu.RUnlock()
 	lr := tp.tokenRefreshed
@@ -210,14 +205,14 @@ func (tp *ConfidentialClientTokenProvider) LastRefreshed() int64 {
 }
 
 // Expiry returns a unix nano timestamp of when the current token, if defined, expires.
-func (tp *ConfidentialClientTokenProvider) Expiry() int64 {
+func (tp *ConfidentialClientAuthProvider) Expiry() int64 {
 	tp.mu.RLock()
 	defer tp.mu.RUnlock()
 	e := tp.tokenExpiry
 	return e
 }
 
-func (tp *ConfidentialClientTokenProvider) expired() bool {
+func (tp *ConfidentialClientAuthProvider) expired() bool {
 	if tp.token == nil {
 		return true
 	}
@@ -225,7 +220,7 @@ func (tp *ConfidentialClientTokenProvider) expired() bool {
 }
 
 // Expired will return true if the currently stored token has expired
-func (tp *ConfidentialClientTokenProvider) Expired() bool {
+func (tp *ConfidentialClientAuthProvider) Expired() bool {
 	tp.mu.Lock()
 	defer tp.mu.Unlock()
 	return tp.expired()
@@ -233,23 +228,13 @@ func (tp *ConfidentialClientTokenProvider) Expired() bool {
 
 // SetTokenValue will first attempt to use the locally cached last-known-good token.  If not defined or beyond the
 // expiration window, it will call RefreshToken before attempting to set the context token value.
-func (tp *ConfidentialClientTokenProvider) BearerToken() (string, error) {
-	tp.mu.RLock()
-	defer tp.mu.RUnlock()
-	if tp.expired() {
-		return "", ErrTokenExpired
-	}
-	return tp.token.AccessToken, nil
-}
-
-// RefreshToken provides an external way to manually refresh a bearer token
-func (tp *ConfidentialClientTokenProvider) RenewBearerToken(ctx context.Context, client *APIClient, force bool) error {
+func (tp *ConfidentialClientAuthProvider) AuthMutators(ctx context.Context, client *APIClient) ([]APIRequestMutator, error) {
 	tp.mu.RLock()
 
 	// check if there is anything to actually do.
-	if !force && !tp.expired() {
-		tp.mu.RUnlock()
-		return nil
+	if !tp.expired() {
+		defer tp.mu.RUnlock()
+		return []APIRequestMutator{BearerAuthRequestMutator(tp.token.AccessToken)}, nil
 	}
 
 	tp.mu.RUnlock()
@@ -258,7 +243,7 @@ func (tp *ConfidentialClientTokenProvider) RenewBearerToken(ctx context.Context,
 
 	// test to ensure that another routine did not grab the lock and already refresh the token.
 	if !tp.expired() {
-		return nil
+		return []APIRequestMutator{BearerAuthRequestMutator(tp.token.AccessToken)}, nil
 	}
 
 	var (
@@ -274,17 +259,17 @@ func (tp *ConfidentialClientTokenProvider) RenewBearerToken(ctx context.Context,
 
 	// fetch new oidc token
 	if oidc, err = client.Login(ctx, req); err != nil {
-		return fmt.Errorf("unable to fetch OpenIDConnectToken: %w", err)
+		return nil, fmt.Errorf("unable to fetch OpenIDConnectToken: %w", err)
 	}
 
 	// try to refresh access token.  this has the side-effect of also validating our new token
 	if _, err = client.ParseToken(ctx, oidc.AccessToken, nil); err != nil {
-		return fmt.Errorf("unable to refresh access token: %w", err)
+		return nil, fmt.Errorf("unable to refresh access token: %w", err)
 	}
 
 	// if valid, update client
 	tp.token = oidc
 	tp.tokenRefreshed = time.Now().UnixNano()
 	tp.tokenExpiry = time.Now().Add((time.Duration(oidc.ExpiresIn) * time.Second) - tp.expiryMargin).UnixNano()
-	return nil
+	return []APIRequestMutator{BearerAuthRequestMutator(tp.token.AccessToken)}, nil
 }

@@ -64,8 +64,8 @@ func CompileAPIClientConfig(provided *APIClientConfig, mutators ...ConfigMutator
 	if provided.RealmProvider != nil {
 		actual.RealmProvider = provided.RealmProvider
 	}
-	if provided.BearerTokenProvider != nil {
-		actual.BearerTokenProvider = provided.BearerTokenProvider
+	if provided.AuthProvider != nil {
+		actual.AuthProvider = provided.AuthProvider
 	}
 	if provided.CacheBackend != nil {
 		actual.CacheBackend = provided.CacheBackend
@@ -143,9 +143,9 @@ func copyStrs(src []string) []string {
 	return dst
 }
 
-func appendRequestMutators(root []RequestMutator, m ...RequestMutator) []RequestMutator {
+func appendRequestMutators(root []APIRequestMutator, m ...APIRequestMutator) []APIRequestMutator {
 	if root == nil {
-		root = make([]RequestMutator, 0)
+		root = make([]APIRequestMutator, 0)
 	}
 	return append(root, m...)
 }

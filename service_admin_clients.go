@@ -22,7 +22,7 @@ func (c *AdminAPIClient) ClientsService() *AdminClientsService {
 }
 
 // List attempts to return a list of all  clients available in the Realm this client was created with
-func (cs *AdminClientsService) List(ctx context.Context, clientID string, viewableOnly bool, mutators ...RequestMutator) (Clients, error) {
+func (cs *AdminClientsService) List(ctx context.Context, clientID string, viewableOnly bool, mutators ...APIRequestMutator) (Clients, error) {
 	var (
 		resp    *http.Response
 		clients Clients
@@ -46,7 +46,7 @@ func (cs *AdminClientsService) List(ctx context.Context, clientID string, viewab
 }
 
 // Get attempts to return details about a specific  Get in the Realm this client was created with
-func (cs *AdminClientsService) Get(ctx context.Context, clientID string, mutators ...RequestMutator) (*Client, error) {
+func (cs *AdminClientsService) Get(ctx context.Context, clientID string, mutators ...APIRequestMutator) (*Client, error) {
 	var (
 		resp   *http.Response
 		client *Client
@@ -61,7 +61,7 @@ func (cs *AdminClientsService) Get(ctx context.Context, clientID string, mutator
 }
 
 // Create attempts to create a new client within
-func (cs *AdminClientsService) Create(ctx context.Context, client *ClientCreate, mutators ...RequestMutator) ([]string, error) {
+func (cs *AdminClientsService) Create(ctx context.Context, client *ClientCreate, mutators ...APIRequestMutator) ([]string, error) {
 	var (
 		resp *http.Response
 		err  error
@@ -74,13 +74,13 @@ func (cs *AdminClientsService) Create(ctx context.Context, client *ClientCreate,
 }
 
 // Update attempts to update a  client in the Realm this client was created with
-func (cs *AdminClientsService) Update(ctx context.Context, clientID string, client *Client, mutators ...RequestMutator) error {
+func (cs *AdminClientsService) Update(ctx context.Context, clientID string, client *Client, mutators ...APIRequestMutator) error {
 	resp, err := cs.c.callAdminRealms(ctx, http.MethodPut, path.Join(kcPathPartClients, clientID), client, mutators...)
 	return handleResponse(resp, http.StatusOK, nil, err)
 }
 
 // Delete attempts to delete a  client from the Realm this client was created with
-func (cs *AdminClientsService) Delete(ctx context.Context, clientID string, mutators ...RequestMutator) error {
+func (cs *AdminClientsService) Delete(ctx context.Context, clientID string, mutators ...APIRequestMutator) error {
 	resp, err := cs.c.callAdminRealms(ctx, http.MethodDelete, path.Join(kcPathPartClients, clientID), nil, mutators...)
 	return handleResponse(resp, http.StatusOK, nil, err)
 }
@@ -104,7 +104,7 @@ func (cs *AdminClientsService) RolesService(clientID string) *AdminClientRolesSe
 }
 
 // List attempts to return all the roles defined with the provided client id
-func (rs *AdminClientRolesService) List(ctx context.Context, mutators ...RequestMutator) (Roles, error) {
+func (rs *AdminClientRolesService) List(ctx context.Context, mutators ...APIRequestMutator) (Roles, error) {
 	var (
 		resp  *http.Response
 		roles Roles
@@ -119,7 +119,7 @@ func (rs *AdminClientRolesService) List(ctx context.Context, mutators ...Request
 }
 
 // Get attempts to locate a single role on a client by the role's name
-func (rs *AdminClientRolesService) Get(ctx context.Context, roleName string, mutators ...RequestMutator) (*Role, error) {
+func (rs *AdminClientRolesService) Get(ctx context.Context, roleName string, mutators ...APIRequestMutator) (*Role, error) {
 	var (
 		resp *http.Response
 		role *Role
@@ -134,7 +134,7 @@ func (rs *AdminClientRolesService) Get(ctx context.Context, roleName string, mut
 }
 
 // Create attempts to create a new role for the provided client
-func (rs *AdminClientRolesService) Create(ctx context.Context, role *Role, mutators ...RequestMutator) ([]string, error) {
+func (rs *AdminClientRolesService) Create(ctx context.Context, role *Role, mutators ...APIRequestMutator) ([]string, error) {
 	var (
 		resp *http.Response
 		err  error
@@ -147,19 +147,19 @@ func (rs *AdminClientRolesService) Create(ctx context.Context, role *Role, mutat
 }
 
 // Update attempts to update the provided role within
-func (rs *AdminClientRolesService) Update(ctx context.Context, roleName string, role *Role, mutators ...RequestMutator) error {
+func (rs *AdminClientRolesService) Update(ctx context.Context, roleName string, role *Role, mutators ...APIRequestMutator) error {
 	resp, err := rs.c.callAdminRealms(ctx, http.MethodPut, path.Join(kcPathPartClients, rs.clientID, kcPathPartRoles, roleName), role, mutators...)
 	return handleResponse(resp, http.StatusOK, nil, err)
 }
 
 // Delete attempts to delete the specified role
-func (rs *AdminClientRolesService) Delete(ctx context.Context, roleName string, mutators ...RequestMutator) error {
+func (rs *AdminClientRolesService) Delete(ctx context.Context, roleName string, mutators ...APIRequestMutator) error {
 	resp, err := rs.c.callAdminRealms(ctx, http.MethodPut, path.Join(kcPathPartClients, rs.clientID, kcPathPartRoles, roleName), nil, mutators...)
 	return handleResponse(resp, http.StatusOK, nil, err)
 }
 
 // Users attempts to return a list of all the users who have the specified role within the keycloak realm
-func (rs *AdminClientRolesService) Users(ctx context.Context, roleName string, first, max int, mutators ...RequestMutator) (Users, error) {
+func (rs *AdminClientRolesService) Users(ctx context.Context, roleName string, first, max int, mutators ...APIRequestMutator) (Users, error) {
 	var (
 		resp  *http.Response
 		users Users
@@ -201,7 +201,7 @@ func (rs *AdminClientRolesService) CompositesService(roleName string) *AdminClie
 }
 
 // List attempts to return all composite roles that the specified role is a member of
-func (crs *AdminClientRoleCompositesService) List(ctx context.Context, mutators ...RequestMutator) (Roles, error) {
+func (crs *AdminClientRoleCompositesService) List(ctx context.Context, mutators ...APIRequestMutator) (Roles, error) {
 	var (
 		resp  *http.Response
 		roles Roles
@@ -216,13 +216,13 @@ func (crs *AdminClientRoleCompositesService) List(ctx context.Context, mutators 
 }
 
 // Add attempts to add the specified role to the provided composite roles
-func (crs *AdminClientRoleCompositesService) Add(ctx context.Context, roles Roles, mutators ...RequestMutator) error {
+func (crs *AdminClientRoleCompositesService) Add(ctx context.Context, roles Roles, mutators ...APIRequestMutator) error {
 	resp, err := crs.tc.callAdminRealms(ctx, http.MethodPost, path.Join(kcPathPartClients, crs.clientID, kcPathPartRoles, crs.roleName, kcPathPartComposites), roles, mutators...)
 	return handleResponse(resp, http.StatusOK, nil, err)
 }
 
 // Remove attempts to remove the provided role from the specified composite roles
-func (crs *AdminClientRoleCompositesService) Remove(ctx context.Context, roles Roles, mutators ...RequestMutator) error {
+func (crs *AdminClientRoleCompositesService) Remove(ctx context.Context, roles Roles, mutators ...APIRequestMutator) error {
 	resp, err := crs.tc.callAdminRealms(ctx, http.MethodDelete, path.Join(kcPathPartClients, crs.clientID, kcPathPartRoles, crs.roleName, kcPathPartComposites), roles, mutators...)
 	return handleResponse(resp, http.StatusOK, nil, err)
 }

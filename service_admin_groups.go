@@ -19,7 +19,7 @@ func (c *AdminAPIClient) GroupsService() *AdminGroupsService {
 
 // List attempts to return to you a list of all the  groups within the Realm this client was created
 // with
-func (gs *AdminGroupsService) List(ctx context.Context, search string, first, max int, mutators ...RequestMutator) (Groups, error) {
+func (gs *AdminGroupsService) List(ctx context.Context, search string, first, max int, mutators ...APIRequestMutator) (Groups, error) {
 	var (
 		resp   *http.Response
 		groups Groups
@@ -47,7 +47,7 @@ func (gs *AdminGroupsService) List(ctx context.Context, search string, first, ma
 }
 
 // Count attempts to return a count of the total number of groups present in
-func (gs *AdminGroupsService) Count(ctx context.Context, search string, top bool, mutators ...RequestMutator) (int, error) {
+func (gs *AdminGroupsService) Count(ctx context.Context, search string, top bool, mutators ...APIRequestMutator) (int, error) {
 	var (
 		resp *http.Response
 		err  error
@@ -74,7 +74,7 @@ func (gs *AdminGroupsService) Count(ctx context.Context, search string, top bool
 }
 
 // Get attempts to retrieve details of a specific  group within the realm this client was created with
-func (gs *AdminGroupsService) Get(ctx context.Context, groupID string, mutators ...RequestMutator) (*Group, error) {
+func (gs *AdminGroupsService) Get(ctx context.Context, groupID string, mutators ...APIRequestMutator) (*Group, error) {
 	var (
 		resp  *http.Response
 		group *Group
@@ -90,7 +90,7 @@ func (gs *AdminGroupsService) Get(ctx context.Context, groupID string, mutators 
 
 // Members attempts to return to you a list of all the  Users present in the  group
 // specified within the realm this client was created with
-func (gs *AdminGroupsService) Members(ctx context.Context, groupID string, mutators ...RequestMutator) (Users, error) {
+func (gs *AdminGroupsService) Members(ctx context.Context, groupID string, mutators ...APIRequestMutator) (Users, error) {
 	var (
 		resp    *http.Response
 		members Users
@@ -105,7 +105,7 @@ func (gs *AdminGroupsService) Members(ctx context.Context, groupID string, mutat
 }
 
 // Create attempts to push a new group into , returning to you the InstallDocument of the newly created group.
-func (gs *AdminGroupsService) Create(ctx context.Context, group GroupCreate, mutators ...RequestMutator) ([]string, error) {
+func (gs *AdminGroupsService) Create(ctx context.Context, group GroupCreate, mutators ...APIRequestMutator) ([]string, error) {
 	var (
 		resp *http.Response
 		err  error
@@ -118,13 +118,13 @@ func (gs *AdminGroupsService) Create(ctx context.Context, group GroupCreate, mut
 }
 
 // Delete attempts to delete a group from
-func (gs *AdminGroupsService) Delete(ctx context.Context, groupID string, mutators ...RequestMutator) error {
+func (gs *AdminGroupsService) Delete(ctx context.Context, groupID string, mutators ...APIRequestMutator) error {
 	resp, err := gs.c.callAdminRealms(ctx, http.MethodDelete, path.Join(kcPathPartGroups, groupID), nil, mutators...)
 	return handleResponse(resp, http.StatusOK, nil, err)
 }
 
 // Update attempts to push updated values for a specific group to
-func (gs *AdminGroupsService) Update(ctx context.Context, groupID string, group Group, mutators ...RequestMutator) error {
+func (gs *AdminGroupsService) Update(ctx context.Context, groupID string, group Group, mutators ...APIRequestMutator) error {
 	resp, err := gs.c.callAdminRealms(ctx, http.MethodPut, path.Join(kcPathPartGroups, groupID), group, mutators...)
 	return handleResponse(resp, http.StatusOK, nil, err)
 }

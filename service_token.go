@@ -24,7 +24,7 @@ func (c *APIClient) TokenService() *TokenService {
 // ClientEntitlement will attempt to call the pre-uma2 entitlement endpoint to return a Requesting Party Token
 // containing details about what aspects of the provided clientID the token for this request has access to, if any.
 // DEPRECATED: use the newer token workflow for instances newer than 3.4
-func (ts *TokenService) ClientEntitlement(ctx context.Context, clientID string, claimsType jwt.Claims, mutators ...RequestMutator) (*jwt.Token, error) {
+func (ts *TokenService) ClientEntitlement(ctx context.Context, clientID string, claimsType jwt.Claims, mutators ...APIRequestMutator) (*jwt.Token, error) {
 	var (
 		resp *http.Response
 		env  *RealmEnvironment
@@ -52,7 +52,7 @@ func (ts *TokenService) ClientEntitlement(ctx context.Context, clientID string, 
 }
 
 // PermissionEvaluation will return an array of permissions granted by the server
-func (ts *TokenService) PermissionEvaluation(ctx context.Context, req *OpenIDConnectTokenRequest, mutators ...RequestMutator) (EvaluatedPermissions, error) {
+func (ts *TokenService) PermissionEvaluation(ctx context.Context, req *OpenIDConnectTokenRequest, mutators ...APIRequestMutator) (EvaluatedPermissions, error) {
 	var (
 		body  url.Values
 		resp  *http.Response
@@ -84,7 +84,7 @@ func (ts *TokenService) PermissionEvaluation(ctx context.Context, req *OpenIDCon
 }
 
 // PermissionDecision can be used to determine whether a bearer token is allowed the permission requested
-func (ts *TokenService) PermissionDecision(ctx context.Context, req *OpenIDConnectTokenRequest, mutators ...RequestMutator) (*PermissionDecisionResponse, error) {
+func (ts *TokenService) PermissionDecision(ctx context.Context, req *OpenIDConnectTokenRequest, mutators ...APIRequestMutator) (*PermissionDecisionResponse, error) {
 	var (
 		res  interface{}
 		resT *PermissionDecisionResponse
@@ -103,7 +103,7 @@ func (ts *TokenService) PermissionDecision(ctx context.Context, req *OpenIDConne
 	return resT, nil
 }
 
-func (ts *TokenService) OpenIDConnectToken(ctx context.Context, req *OpenIDConnectTokenRequest, mutators ...RequestMutator) (*OpenIDConnectToken, error) {
+func (ts *TokenService) OpenIDConnectToken(ctx context.Context, req *OpenIDConnectTokenRequest, mutators ...APIRequestMutator) (*OpenIDConnectToken, error) {
 	var (
 		res   interface{}
 		token *OpenIDConnectToken
@@ -121,7 +121,7 @@ func (ts *TokenService) OpenIDConnectToken(ctx context.Context, req *OpenIDConne
 }
 
 // RequestingPartyToken will attempt to automatically decode and validate a RPT returned from an OIDC token request
-func (ts *TokenService) RequestingPartyToken(ctx context.Context, req *OpenIDConnectTokenRequest, claimsType jwt.Claims, mutators ...RequestMutator) (*jwt.Token, error) {
+func (ts *TokenService) RequestingPartyToken(ctx context.Context, req *OpenIDConnectTokenRequest, claimsType jwt.Claims, mutators ...APIRequestMutator) (*jwt.Token, error) {
 	req.ResponseMode = nil
 	resp, err := ts.OpenIDConnectToken(ctx, req, mutators...)
 	if err != nil {
@@ -130,7 +130,7 @@ func (ts *TokenService) RequestingPartyToken(ctx context.Context, req *OpenIDCon
 	return ts.c.ParseToken(ctx, resp.AccessToken, claimsType)
 }
 
-func (ts *TokenService) IntrospectRequestingPartyToken(ctx context.Context, rawRPT string, mutators ...RequestMutator) (*TokenIntrospectionResults, error) {
+func (ts *TokenService) IntrospectRequestingPartyToken(ctx context.Context, rawRPT string, mutators ...APIRequestMutator) (*TokenIntrospectionResults, error) {
 	var (
 		body    url.Values
 		resp    *http.Response

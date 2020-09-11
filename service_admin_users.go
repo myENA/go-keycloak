@@ -17,7 +17,7 @@ func (c *AdminAPIClient) UsersService() *AdminUsersService {
 }
 
 // List attempts to retrieve a list of users from
-func (us *AdminUsersService) List(ctx context.Context, email, firstName, lastName, username, search string, first, max int, mutators ...RequestMutator) (Users, error) {
+func (us *AdminUsersService) List(ctx context.Context, email, firstName, lastName, username, search string, first, max int, mutators ...APIRequestMutator) (Users, error) {
 	var (
 		resp  *http.Response
 		users Users
@@ -46,7 +46,7 @@ func (us *AdminUsersService) List(ctx context.Context, email, firstName, lastNam
 }
 
 // Count attempts to get a count of all users currently in a keycloak realm
-func (us *AdminUsersService) Count(ctx context.Context, mutators ...RequestMutator) (int, error) {
+func (us *AdminUsersService) Count(ctx context.Context, mutators ...APIRequestMutator) (int, error) {
 	var (
 		resp  *http.Response
 		count int
@@ -58,7 +58,7 @@ func (us *AdminUsersService) Count(ctx context.Context, mutators ...RequestMutat
 }
 
 // Get attempts to query  for a specific user based on their InstallDocument
-func (us *AdminUsersService) Get(ctx context.Context, userID string, mutators ...RequestMutator) (*User, error) {
+func (us *AdminUsersService) Get(ctx context.Context, userID string, mutators ...APIRequestMutator) (*User, error) {
 	var (
 		resp *http.Response
 		user *User
@@ -73,7 +73,7 @@ func (us *AdminUsersService) Get(ctx context.Context, userID string, mutators ..
 }
 
 // Create attempts to add a user to a keycloak realm
-func (us *AdminUsersService) Create(ctx context.Context, user *UserCreate, mutators ...RequestMutator) ([]string, error) {
+func (us *AdminUsersService) Create(ctx context.Context, user *UserCreate, mutators ...APIRequestMutator) ([]string, error) {
 	var (
 		resp *http.Response
 		err  error
@@ -86,13 +86,13 @@ func (us *AdminUsersService) Create(ctx context.Context, user *UserCreate, mutat
 }
 
 // Update attempts to push an updated user definition
-func (us *AdminUsersService) Update(ctx context.Context, userID string, user *User, mutators ...RequestMutator) error {
+func (us *AdminUsersService) Update(ctx context.Context, userID string, user *User, mutators ...APIRequestMutator) error {
 	resp, err := us.c.callAdminRealms(ctx, http.MethodPut, path.Join(kcPathPartUsers, userID), user, mutators...)
 	return handleResponse(resp, http.StatusOK, nil, err)
 }
 
 // Delete attempts to delete a user from the keycloak realm
-func (us *AdminUsersService) Delete(ctx context.Context, userID string, mutators ...RequestMutator) error {
+func (us *AdminUsersService) Delete(ctx context.Context, userID string, mutators ...APIRequestMutator) error {
 	resp, err := us.c.callAdminRealms(ctx, http.MethodDelete, path.Join(kcPathPartUsers, userID), nil, mutators...)
 	return handleResponse(resp, http.StatusOK, nil, err)
 }
@@ -114,7 +114,7 @@ func (us *AdminUsersService) GroupsService(userID string) *AdminUserGroupsServic
 }
 
 // List attempts to return the list of  groups the provided User is a member of
-func (gs *AdminUserGroupsService) List(ctx context.Context, mutators ...RequestMutator) (Groups, error) {
+func (gs *AdminUserGroupsService) List(ctx context.Context, mutators ...APIRequestMutator) (Groups, error) {
 	var (
 		resp   *http.Response
 		groups Groups
@@ -129,13 +129,13 @@ func (gs *AdminUserGroupsService) List(ctx context.Context, mutators ...RequestM
 }
 
 // Add attempts to add the service user to the specified group
-func (gs *AdminUserGroupsService) Add(ctx context.Context, groupID string, mutators ...RequestMutator) error {
+func (gs *AdminUserGroupsService) Add(ctx context.Context, groupID string, mutators ...APIRequestMutator) error {
 	resp, err := gs.c.callAdminRealms(ctx, http.MethodPut, path.Join(kcPathPartUsers, gs.userID, kcPathPartGroups, groupID), nil, mutators...)
 	return handleResponse(resp, http.StatusOK, nil, err)
 }
 
 // Remove attempts to remove the service user from the specified group
-func (gs *AdminUserGroupsService) Remove(ctx context.Context, groupID string, mutators ...RequestMutator) error {
+func (gs *AdminUserGroupsService) Remove(ctx context.Context, groupID string, mutators ...APIRequestMutator) error {
 	resp, err := gs.c.callAdminRealms(ctx, http.MethodDelete, path.Join(kcPathPartUsers, gs.userID, kcPathPartGroups, groupID), nil, mutators...)
 	return handleResponse(resp, http.StatusOK, nil, err)
 }
@@ -156,7 +156,7 @@ func (us *AdminUsersService) RoleMappingService(userID string) *AdminUserRoleMap
 	return us.c.UserRoleMappingsService(userID)
 }
 
-func (rms *AdminUserRoleMappingsService) Get(ctx context.Context, mutators ...RequestMutator) (*RoleMapping, error) {
+func (rms *AdminUserRoleMappingsService) Get(ctx context.Context, mutators ...APIRequestMutator) (*RoleMapping, error) {
 	var (
 		resp        *http.Response
 		roleMapping *RoleMapping
@@ -186,7 +186,7 @@ func (rms *AdminUserRoleMappingsService) RealmsService() *AdminUserRoleMappingRe
 	return rms.c.UserRoleMappingRealmsService(rms.userID)
 }
 
-func (rms *AdminUserRoleMappingRealmsService) List(ctx context.Context, mutators ...RequestMutator) (Roles, error) {
+func (rms *AdminUserRoleMappingRealmsService) List(ctx context.Context, mutators ...APIRequestMutator) (Roles, error) {
 	var (
 		resp  *http.Response
 		roles Roles
@@ -200,7 +200,7 @@ func (rms *AdminUserRoleMappingRealmsService) List(ctx context.Context, mutators
 	return roles, nil
 }
 
-func (rms *AdminUserRoleMappingRealmsService) Available(ctx context.Context, mutators ...RequestMutator) (Roles, error) {
+func (rms *AdminUserRoleMappingRealmsService) Available(ctx context.Context, mutators ...APIRequestMutator) (Roles, error) {
 	var (
 		resp  *http.Response
 		roles Roles
