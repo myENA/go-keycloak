@@ -490,7 +490,7 @@ func NewAdminAPIClient(config *APIClientConfig, mutators ...ConfigMutator) (*Adm
 	return c.Admin(), nil
 }
 
-func NewAdminClientWithProvider(cp CombinedProvider, mutators ...ConfigMutator) (*AdminAPIClient, error) {
+func NewAdminAPIClientWithProvider(cp CombinedProvider, mutators ...ConfigMutator) (*AdminAPIClient, error) {
 	c, err := NewAPIClientWithProvider(cp)
 	if err != nil {
 		return nil, err
@@ -498,7 +498,7 @@ func NewAdminClientWithProvider(cp CombinedProvider, mutators ...ConfigMutator) 
 	return c.Admin(), nil
 }
 
-func NewAdminClientWithInstallDocument(id *InstallDocument, mutators ...ConfigMutator) (*AdminAPIClient, error) {
+func NewAdminAPIClientWithInstallDocument(id *InstallDocument, mutators ...ConfigMutator) (*AdminAPIClient, error) {
 	c, err := NewAPIClientWithInstallDocument(id, mutators...)
 	if err != nil {
 		return nil, err
