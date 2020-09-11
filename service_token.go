@@ -95,7 +95,10 @@ func (ts *TokenService) PermissionDecision(ctx context.Context, req *OpenIDConne
 	)
 	req.ResponseMode = &mode
 	if res, err = ts.c.openIDConnectToken(ctx, true, req, mutators...); err != nil {
-		return nil, err
+		if IsAPIError(err) && err.(*APIError).ResponseCode != http.StatusForbidden {
+			return nil, err
+		}
+		return &PermissionDecisionResponse{Result: false}, err
 	}
 	if resT, ok = res.(*PermissionDecisionResponse); !ok {
 		return nil, fmt.Errorf("expected response to be %T, saw %T", resT, res)

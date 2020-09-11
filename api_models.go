@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/dgrijalva/jwt-go"
@@ -245,22 +244,6 @@ func NewOpenIDConnectTokenPermission(resource, scope string) PermissionRequestPe
 	return PermissionRequestPermission{resource, scope}
 }
 
-func (p PermissionRequestPermission) MarshalText() ([]byte, error) {
-	return []byte(fmt.Sprintf("%s#%s", p.Resource, p.Scope)), nil
-}
-
-func (p *PermissionRequestPermission) UnmarshalText(b []byte) error {
-	if len(b) == 0 {
-		return nil
-	}
-	if !strings.Contains(string(b), "#") {
-		return fmt.Errorf("expected token \"#\" missing in %q", string(b))
-	}
-	s := strings.SplitN(string(b), "#", 2)
-	*p = PermissionRequestPermission{s[0], s[1]}
-	return nil
-}
-
 type OpenIDConnectTokenRequest struct {
 	// GrantType [required] - Type of grant to evaluate
 	// 	- client_credentials
@@ -293,7 +276,7 @@ type OpenIDConnectTokenRequest struct {
 	RequestingPartyToken string `json:"rpt,omitempty" url:"rpt,omitempty"`
 
 	// Permission [optional] - PermissionEvaluation specific access to a resource and scope
-	Permissions []PermissionRequestPermission `json:"permission,omitempty" url:"permission,omitempty"`
+	Permissions []string `json:"permission,omitempty" url:"permission,omitempty"`
 
 	// ResponseMode [optional] - Used in some uma2 token workflows
 	ResponseMode *string `json:"response_mode,omitempty" url:"response_mode,omitempty"`
@@ -311,7 +294,9 @@ type OpenIDConnectTokenRequest struct {
 func NewOpenIDConnectTokenRequest(grantType string, permissions ...PermissionRequestPermission) *OpenIDConnectTokenRequest {
 	r := new(OpenIDConnectTokenRequest)
 	r.GrantType = grantType
-	r.Permissions = permissions
+	for _, perm := range permissions {
+		r.AddPermission(perm.Resource, perm.Scope)
+	}
 	return r
 }
 
@@ -319,9 +304,9 @@ func NewOpenIDConnectTokenRequest(grantType string, permissions ...PermissionReq
 // your own risk.
 func (r *OpenIDConnectTokenRequest) AddPermission(resource, scope string) *OpenIDConnectTokenRequest {
 	if r.Permissions == nil {
-		r.Permissions = make([]PermissionRequestPermission, 0)
+		r.Permissions = make([]string, 0)
 	}
-	r.Permissions = append(r.Permissions, NewOpenIDConnectTokenPermission(resource, scope))
+	r.Permissions = append(r.Permissions, fmt.Sprintf("%s#%s", resource, scope))
 	return r
 }
 
