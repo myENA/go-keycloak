@@ -508,6 +508,26 @@ func (cas *AdminClientAuthzService) PolicySearch(ctx context.Context, name strin
 	return policy, nil
 }
 
+func (cas *AdminClientAuthzService) PolicyCreateRole(ctx context.Context, body *PolicyCreate, mutators ...APIRequestMutator) (*Policy, error) {
+	var (
+		resp   *http.Response
+		policy *Policy
+		err    error
+	)
+	resp, err = cas.c.callAdminRealms(
+		ctx,
+		http.MethodPost,
+		path.Join(kcPathPartClients, cas.clientID, kcPathPartAuthz, kcPathPartResourceServer, kcPathPartPolicy),
+		body,
+		mutators...,
+	)
+	policy = new(Policy)
+	if err = handleResponse(resp, http.StatusCreated, policy, err); err != nil {
+		return nil, err
+	}
+	return policy, nil
+}
+
 func (cas *AdminClientAuthzService) Permissions(ctx context.Context, first, max int, mutators ...APIRequestMutator) (Permissions, error) {
 	var (
 		resp  *http.Response

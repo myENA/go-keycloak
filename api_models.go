@@ -9,11 +9,12 @@ import (
 	"github.com/dgrijalva/jwt-go"
 )
 
+type KeyValueMap map[string]string
 type KeyValuesMap map[string][]string
 
-type Time time.Time
+type MicrosecondTime time.Time
 
-func (k *Time) UnmarshalJSON(b []byte) error {
+func (t *MicrosecondTime) UnmarshalJSON(b []byte) error {
 	if len(b) == 0 {
 		return nil
 	}
@@ -21,18 +22,38 @@ func (k *Time) UnmarshalJSON(b []byte) error {
 	if err != nil {
 		return fmt.Errorf("error converting %q to int: %w", string(b), err)
 	}
-	*k = Time(time.Unix(0, int64(i)*int64(time.Microsecond)))
+	*t = MicrosecondTime(time.Unix(0, int64(i)*int64(time.Microsecond)))
 	return nil
 }
 
-func (k *Time) MarshalJSON() ([]byte, error) {
-	if k == nil {
+func (t *MicrosecondTime) MarshalJSON() ([]byte, error) {
+	if t == nil {
 		return nil, nil
 	}
-	if time.Time(*k).IsZero() {
+	if time.Time(*t).IsZero() {
 		return []byte("0"), nil
 	}
-	return []byte(strconv.FormatInt(time.Time(*k).UnixNano()/int64(time.Microsecond), 10)), nil
+	return []byte(strconv.FormatInt(time.Time(*t).UnixNano()/int64(time.Microsecond), 10)), nil
+}
+
+type PolicyTime time.Time
+
+const PolicyTimeFormat = "2006-01-02 15:04:05"
+
+func (t *PolicyTime) UnmarshalJSON(b []byte) error {
+	if len(b) == 0 {
+		return nil
+	}
+	tmp, err := time.Parse(PolicyTimeFormat, string(b))
+	if err != nil {
+		return err
+	}
+	*t = PolicyTime(tmp)
+	return nil
+}
+
+func (t PolicyTime) MarshalJSON() ([]byte, error) {
+	return json.Marshal(time.Time(t).Format(PolicyTimeFormat))
 }
 
 type AdminCreateResponse struct {
@@ -178,12 +199,12 @@ type User struct {
 	RequiredActions []string     `json:"requiredActions"`
 	Username        string       `json:"username"`
 
-	CreatedTimestamp           Time          `json:"createdTimestamp"`
-	DisableableCredentialTypes []string      `json:"disableableCredentialTypes"`
-	FederatedIdentities        []interface{} `json:"federatedIdentities"`
-	ID                         string        `json:"id"`
-	NotBefore                  Time          `json:"notBefore"`
-	Totp                       bool          `json:"totp"`
+	CreatedTimestamp           MicrosecondTime `json:"createdTimestamp"`
+	DisableableCredentialTypes []string        `json:"disableableCredentialTypes"`
+	FederatedIdentities        []interface{}   `json:"federatedIdentities"`
+	ID                         string          `json:"id"`
+	NotBefore                  MicrosecondTime `json:"notBefore"`
+	Totp                       bool            `json:"totp"`
 }
 
 type Users []*User
@@ -423,11 +444,16 @@ func (m ResourceMap) IDs() []string {
 }
 
 type ResourceCreate struct {
-	Name    string   `json:"name"`
 	IconURI string   `json:"icon_uri"`
+	Name    string   `json:"name"`
 	Scopes  []*Scope `json:"scopes"`
 	Type    string   `json:"type"`
-	URI     string   `json:"uri"`
+
+	URI string `json:"uri,omitempty"` // used by 3.4
+
+	DisplayName string      `json:"displayName,omitempty"` // used by 4.0+
+	URIs        []string    `json:"uris,omitempty"`        // used by 4.0+
+	Attributes  KeyValueMap `json:"attributes,omitempty"`  // used by 4.0+
 }
 
 type ResourceServerOverview struct {
@@ -633,14 +659,77 @@ func (conf *PolicyConfig) UnmarshalJSON(buf []byte) error {
 	return nil
 }
 
+type PolicyCreateRole struct {
+	ID       string `json:"id"`
+	Required bool   `json:"required"`
+}
+
+type PolicyCreate struct {
+	// Type [required] - one of: role, js,
+	Type             string `json:"type"`
+	DecisionStrategy string `json:"decisionStrategy"`
+	Logic            string `json:"logic"`
+	Name             string `json:"name"`
+	Description      string `json:"description"`
+
+	// Roles [optional] - only used when type == "role"
+	Roles []PolicyCreateRole `json:"roles,omitempty"`
+	// Code [optional] - only used when type == "js"
+	Code string `json:"code,omitempty"`
+	// Clients [optional] - list of client ids, only used when type == "client"
+	Clients []string `json:"clients,omitempty"`
+
+	// -- start time policy fields
+	// each of the following fields are only usable when type == "time"
+
+	DayMonth     int         `json:"dayMonth,omitempty"`
+	DayMonthEnd  int         `json:"dayMonthEnd,omitempty"`
+	Hour         int         `json:"hour,omitempty"`
+	HourEnd      int         `json:"hourEnd,omitempty"`
+	Minute       int         `json:"minute,omitempty"`
+	MinuteEnd    int         `json:"minuteEnd,omitempty"`
+	Month        int         `json:"month,omitempty"`
+	MonthEnd     int         `json:"monthEnd,omitempty"`
+	NotBefore    *PolicyTime `json:"notBefore,omitempty"`
+	NotOnOrAfter *PolicyTime `json:"notOnOrAfter,omitempty"`
+	Year         int         `json:"year,omitempty"`
+	YearEnd      int         `json:"yearEnd,omitempty"`
+
+	// -- end time policy fields
+}
+
 type Policy struct {
-	ID               string       `json:"id,omitempty"`
-	Name             string       `json:"name,omitempty"`
-	Description      *string      `json:"description,omitempty"`
-	Type             string       `json:"type,omitempty"`
-	Logic            string       `json:"logic,omitempty"`
-	DecisionStrategy string       `json:"decisionStrategy,omitempty"`
-	Config           PolicyConfig `json:"config,omitempty"`
+	ID               string       `json:"id"`
+	Name             string       `json:"name"`
+	Description      *string      `json:"description"`
+	Type             string       `json:"type"`
+	Logic            string       `json:"logic"`
+	DecisionStrategy string       `json:"decisionStrategy"`
+	Config           PolicyConfig `json:"config"`
+
+	// Code - only returned when type == "js"
+	Code string `json:"code"`
+
+	// Roles - only returned when type == "role"
+	Roles Roles `json:"roles"`
+
+	// Clients - list of client ids, only returned when type == "client"
+	Clients []string `json:"clients"`
+
+	// Time policy fields
+
+	DayMonth     string     `json:"dayMonth"`
+	DayMonthEnd  string     `json:"dayMonthEnd"`
+	Hour         string     `json:"hour"`
+	HourEnd      string     `json:"hourEnd"`
+	Minute       string     `json:"minute"`
+	MinuteEnd    string     `json:"minuteEnd"`
+	Month        string     `json:"month"`
+	MonthEnd     string     `json:"monthEnd"`
+	NotBefore    PolicyTime `json:"notBefore"`
+	NotOnOrAfter PolicyTime `json:"notOnOrAfter"`
+	Year         string     `json:"year"`
+	YearEnd      string     `json:"yearEnd"`
 }
 
 type Policies []*Policy
@@ -700,17 +789,21 @@ type RoleMapping struct {
 }
 
 type Scope struct {
-	ID              string                  `json:"id,omitempty"`
-	Name            string                  `json:"name"`
-	Attributes      KeyValuesMap            `json:"attributes"`
-	Description     *string                 `json:"description,omitempty"`
-	Protocol        *string                 `json:"protocol,omitempty"`
-	ProtocolMappers []*ClientProtocolMapper `json:"protocolMappers,omitempty"`
+	ID              string                 `json:"id"`
+	Name            string                 `json:"name"`
+	Attributes      KeyValuesMap           `json:"attributes"`
+	Description     string                 `json:"description"`
+	Protocol        string                 `json:"protocol,omitempty"`
+	ProtocolMappers []ClientProtocolMapper `json:"protocolMappers"`
+
+	DisplayName string `json:"displayName"` // used by 4.0+
 }
 
 type MinimalScopeCreate struct {
 	Name    string `json:"name"`
 	IconURI string `json:"iconUri"`
+
+	DisplayName string `json:"displayName,omitempty"` // used by 4.0+
 }
 
 type ScopeMap map[string]*Scope
