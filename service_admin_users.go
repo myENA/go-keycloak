@@ -30,13 +30,13 @@ func (us *AdminUsersService) List(ctx context.Context, email, firstName, lastNam
 		nil,
 		appendRequestMutators(
 			mutators,
-			ValuedQueryMutator("email", email, true),
-			ValuedQueryMutator("firstName", firstName, true),
-			ValuedQueryMutator("lastName", lastName, true),
-			ValuedQueryMutator("username", username, true),
-			ValuedQueryMutator("search", search, true),
-			ValuedQueryMutator("first", first, true),
-			ValuedQueryMutator("max", max, true),
+			NonZeroQueryMutator("email", email, nil, true),
+			NonZeroQueryMutator("firstName", firstName, nil, true),
+			NonZeroQueryMutator("lastName", lastName, nil, true),
+			NonZeroQueryMutator("username", username, nil, true),
+			NonZeroQueryMutator("search", search, nil, true),
+			NonZeroQueryMutator("first", first, nil, true),
+			NonZeroQueryMutator("max", max, nil, true),
 		)...)
 	users = make(Users, 0)
 	if err = handleResponse(resp, http.StatusOK, &users, err); err != nil {

@@ -55,19 +55,38 @@ const (
 	// ks api paths
 	kcURLPathRealmsFormat      = "%s/realms/%s/%s"
 	kcURLPathAdminRealmsFormat = "%s/admin/realms/%s/%s"
-	kcPathOIDC                 = ".well-known/openid-configuration"
-	kcPathUMA2C                = ".well-known/uma2-configuration"
-	kcPathPrefixEntitlement    = "authz/entitlement"
-	kcPathPartAvailable        = "available"
-	kcPathPartClients          = "clients"
-	kcPathPartComposites       = "composites"
-	kcPathPartCount            = "count"
-	kcPathPartGroups           = "groups"
-	kcPathPartMembers          = "members"
-	kcPathPartRealm            = "realm"
-	kcPathPartRoleMappings     = "role-mappings"
-	kcPathPartRoles            = "roles"
-	kcPathPartUsers            = "users"
+
+	// well known stuff
+	kcPathOIDC  = ".well-known/openid-configuration"
+	kcPathUMA2C = ".well-known/uma2-configuration"
+
+	// individual api call path slugs
+	kcPathPartAssociatedPolicies = "associatedPolicies"
+	kcPathPartAuthz              = "authz"
+	kcPathPartAvailable          = "available"
+	kcPathPartClients            = "clients"
+	kcPathPartClientScopes       = "client-scopes"
+	kcPathPartComposites         = "composites"
+	kcPathPartCount              = "count"
+	kcPathPartDependentPolicies  = "dependentPolicies"
+	kcPathPartEntitlement        = "entitlement"
+	kcPathPartGroups             = "groups"
+	kcPathPartMembers            = "members"
+	kcPathPartPermission         = "permission"
+	kcPathPartPermissions        = "permissions"
+	kcPathPartPolicy             = "policy"
+	kcPathPartProviders          = "providers"
+	kcPathPartRealm              = "realm"
+	kcPathPartResource           = "resource"
+	kcPathPartResourceServer     = "resource-server"
+	kcPathPartRoleMappings       = "role-mappings"
+	kcPathPartRole               = "role"
+	kcPathPartRoles              = "roles"
+	kcPathPartRolesByID          = "roles-by-id"
+	kcPathPartSearch             = "search"
+	kcPathPartScope              = "scope"
+	kcPathPartScopes             = "scopes"
+	kcPathPartUsers              = "users"
 )
 
 // DebugConfig
@@ -240,8 +259,9 @@ func (c *APIClient) BearerTokenProvider() (AuthProvider, error) {
 	return c.ap, nil
 }
 
-func (c *APIClient) Admin() *AdminAPIClient {
-	return &AdminAPIClient{c}
+// Admin returns a new AdminAPIClient for the provided realm (does not have to be the same as the auth'd realm)
+func (c *APIClient) Admin(realmName string) *AdminAPIClient {
+	return &AdminAPIClient{APIClient: c, realmName: realmName}
 }
 
 // realmsURL builds a request path under the /realms/{realm}/... path
@@ -477,9 +497,10 @@ func (c *APIClient) openIDConnectToken(ctx context.Context, authenticated bool, 
 // AdminAPIClient is a simple extension of the base APIClient, adding /admin api calls
 type AdminAPIClient struct {
 	*APIClient
+	realmName string
 }
 
-func NewAdminAPIClient(config *APIClientConfig, mutators ...ConfigMutator) (*AdminAPIClient, error) {
+func NewAdminAPIClient(config *APIClientConfig, realmName string, mutators ...ConfigMutator) (*AdminAPIClient, error) {
 	var (
 		c   *APIClient
 		err error
@@ -487,23 +508,24 @@ func NewAdminAPIClient(config *APIClientConfig, mutators ...ConfigMutator) (*Adm
 	if c, err = NewAPIClient(config, mutators...); err != nil {
 		return nil, err
 	}
-	return c.Admin(), nil
+	c.realmName = realmName
+	return c.Admin(realmName), nil
 }
 
-func NewAdminAPIClientWithProvider(cp CombinedProvider, mutators ...ConfigMutator) (*AdminAPIClient, error) {
-	c, err := NewAPIClientWithProvider(cp)
+func NewAdminAPIClientWithProvider(cp CombinedProvider, realmName string, mutators ...ConfigMutator) (*AdminAPIClient, error) {
+	c, err := NewAPIClientWithProvider(cp, mutators...)
 	if err != nil {
 		return nil, err
 	}
-	return c.Admin(), nil
+	return c.Admin(realmName), nil
 }
 
-func NewAdminAPIClientWithInstallDocument(id *InstallDocument, mutators ...ConfigMutator) (*AdminAPIClient, error) {
+func NewAdminAPIClientWithInstallDocument(id *InstallDocument, realmName string, mutators ...ConfigMutator) (*AdminAPIClient, error) {
 	c, err := NewAPIClientWithInstallDocument(id, mutators...)
 	if err != nil {
 		return nil, err
 	}
-	return c.Admin(), nil
+	return c.Admin(realmName), nil
 }
 
 // adminRealmsURL builds a request path under the /admin/realms/{realm}/... path

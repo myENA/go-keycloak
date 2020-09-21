@@ -32,9 +32,9 @@ func (gs *AdminGroupsService) List(ctx context.Context, search string, first, ma
 		nil,
 		appendRequestMutators(
 			mutators,
-			ValuedQueryMutator("search", search, true),
-			ValuedQueryMutator("first", first, true),
-			ValuedQueryMutator("max", max, true),
+			NonZeroQueryMutator("search", search, nil, true),
+			NonZeroQueryMutator("first", first, nil, true),
+			NonZeroQueryMutator("max", max, nil, true),
 		)...)
 	if err != nil {
 		return nil, err
@@ -63,8 +63,8 @@ func (gs *AdminGroupsService) Count(ctx context.Context, search string, top bool
 		nil,
 		appendRequestMutators(
 			mutators,
-			ValuedQueryMutator("search", search, true),
-			ValuedQueryMutator("top", strconv.FormatBool(top), true),
+			NonZeroQueryMutator("search", search, nil, true),
+			NonZeroQueryMutator("top", strconv.FormatBool(top), nil, true),
 		)...)
 	if err = handleResponse(resp, http.StatusOK, model, err); err != nil {
 		return 0, err

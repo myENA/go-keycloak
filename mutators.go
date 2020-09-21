@@ -23,18 +23,19 @@ type ConfigMutator func(*APIClientConfig)
 // been built.
 type APIRequestMutator func(*APIRequest) error
 
-// ValuedParameterFormatter
+// ParameterFormatter
 //
-// This func is called inside the ValuedQueryMutator func to determine if and how the provided value will be added to
+// This func is called inside the NonZeroQueryMutator func to determine if and how the provided value will be added to
 // a given request's query parameter string.
-type ValuedParameterFormatterFunc func(destination, name string, value interface{}) (formatted string, use bool)
+type ParameterFormatterFunc func(destination, name string, value interface{}) (formatted string, use bool)
 
-// ValuedParameterFormatter is called by the ValuedQueryParameter and ValuedHeaderFormatter funcs when determining
+// ParameterFormatter is called by the ValuedQueryParameter and ValuedHeaderFormatter funcs when determining
 // if and how values should be added to a given request
-var ValuedParameterFormatter ValuedParameterFormatterFunc = DefaultValuedParameterFormatter
+var ParameterFormatter ParameterFormatterFunc = DefaultParameterFormatter
 
-// DefaultValuedParameterFormatter provides some baseline value-to-string conversions, skipping zero-vals.
-func DefaultValuedParameterFormatter(_, _ string, v interface{}) (string, bool) {
+// DefaultParameterFormatter provides some baseline value-to-string conversions.  The 2nd argument must indicate whether
+// the value is a zero-val of that type or not
+func DefaultParameterFormatter(_, _ string, v interface{}) (value string, valued bool) {
 	// if provided is nil, immediately return
 	if v == nil {
 		return "", false
@@ -43,65 +44,61 @@ func DefaultValuedParameterFormatter(_, _ string, v interface{}) (string, bool) 
 	// some basic type tests
 	switch v.(type) {
 	case string:
-		if sv := v.(string); sv != "" {
-			return sv, true
-		}
+		sv := v.(string)
+		return sv, sv != ""
 
 	case int:
-		if iv := v.(int); iv != 0 {
-			return strconv.Itoa(v.(int)), true
-		}
+		iv := v.(int)
+		return strconv.Itoa(v.(int)), iv != 0
 
 	case int64:
-		if iv := v.(int64); iv != 0 {
-			return strconv.FormatInt(v.(int64), 10), true
-		}
+		iv := v.(int64)
+		return strconv.FormatInt(v.(int64), 10), iv != 0
 
 	case float64:
-		if fv := v.(float64); fv != 0 {
-			return strconv.FormatFloat(v.(float64), 'f', 8, 64), true
-		}
+		fv := v.(float64)
+		return strconv.FormatFloat(v.(float64), 'f', 8, 64), fv != 0
 
 	case uint64:
-		if uv := v.(uint64); uv != 0 {
-			return strconv.FormatUint(uv, 10), true
-		}
+		uv := v.(uint64)
+		return strconv.FormatUint(uv, 10), uv != 0
 
 	case bool:
-		if bv := v.(bool); bv {
-			return strconv.FormatBool(bv), true
-		}
+		bv := v.(bool)
+		return strconv.FormatBool(bv), bv
 
 	default:
 		// ideally this will very rarely / never be hit, but may as well leave it here as a catch-all.
-		if reflect.ValueOf(v).IsZero() {
-			return "", false
-		}
-		return fmt.Sprintf("%v", v), true
+		return fmt.Sprintf("%v", v), reflect.ValueOf(v).IsZero()
 	}
-
-	// if we reach here, assume zeroval of switch case
-	return "", false
 }
 
-// QueryMutator will return a APIRequestMutator that either sets or adds a query parameter and value
-func QueryMutator(k, v string, override bool) APIRequestMutator {
+func buildQueryMutator(k string, v, def interface{}, override, requiredValued bool) APIRequestMutator {
 	return func(r *APIRequest) error {
+		value, valued := DefaultParameterFormatter(ParameterDestinationQuery, k, v)
+		if !valued {
+			value, valued = DefaultParameterFormatter(ParameterDestinationQuery, k, def)
+		}
+		if requiredValued && !valued {
+			return nil
+		}
 		if override {
-			r.SetQueryParameter(k, []string{v})
+			r.SetQueryParameter(k, []string{value})
 		} else {
-			r.AddQueryParameter(k, []string{v})
+			r.AddQueryParameter(k, []string{value})
 		}
 		return nil
 	}
 }
 
-// ValuedQueryMutator will return a APIRequestMutator only if v is a non-zero value of its type
-func ValuedQueryMutator(k string, v interface{}, override bool) APIRequestMutator {
-	if sv, ok := ValuedParameterFormatter(ParameterDestinationQuery, k, v); ok {
-		return QueryMutator(k, sv, override)
-	}
-	return nil
+// QueryMutator will return a APIRequestMutator that either sets or adds a query parameter and value
+func QueryMutator(key string, value interface{}, override bool) APIRequestMutator {
+	return buildQueryMutator(key, value, nil, override, false)
+}
+
+// NonZeroQueryMutator will return a APIRequestMutator only if v is a non-zero value of its type
+func NonZeroQueryMutator(key string, value, defaultValue interface{}, override bool) APIRequestMutator {
+	return buildQueryMutator(key, value, defaultValue, override, true)
 }
 
 // HeaderMutator returns a APIRequestMutator that will add or override a value in the header of the request
@@ -116,10 +113,10 @@ func HeaderMutator(k, v string, override bool) APIRequestMutator {
 	}
 }
 
-// ValuedHeaderMutator returns a APIRequestMutator that will add or override a value in the header of a request, given the
-// provided value is "valued"
-func ValuedHeaderMutator(k string, v interface{}, override bool) APIRequestMutator {
-	if sv, ok := ValuedParameterFormatter(ParameterDestinationHeader, k, v); ok {
+// NonZeroHeaderMutator returns a APIRequestMutator that will add or override a value in the header of a request if v
+// is a non-zero value of its type
+func NonZeroHeaderMutator(k string, v interface{}, override bool) APIRequestMutator {
+	if sv, ok := ParameterFormatter(ParameterDestinationHeader, k, v); ok {
 		return HeaderMutator(k, sv, override)
 	}
 	return nil

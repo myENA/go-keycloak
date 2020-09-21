@@ -44,7 +44,7 @@ func (ts *TokenService) ClientEntitlement(ctx context.Context, clientID string, 
 	rptResp := new(struct {
 		RPT string `json:"rpt"`
 	})
-	resp, err = ts.c.Call(ctx, true, http.MethodGet, ts.c.realmsURL(kcPathPrefixEntitlement, clientID), nil, mutators...)
+	resp, err = ts.c.Call(ctx, true, http.MethodGet, ts.c.realmsURL(kcPathPartAuthz, kcPathPartEntitlement, clientID), nil, mutators...)
 	if err = handleResponse(resp, http.StatusOK, rptResp, err); err != nil {
 		return nil, err
 	}

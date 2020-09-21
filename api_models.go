@@ -35,6 +35,10 @@ func (k *Time) MarshalJSON() ([]byte, error) {
 	return []byte(strconv.FormatInt(time.Time(*k).UnixNano()/int64(time.Microsecond), 10)), nil
 }
 
+type AdminCreateResponse struct {
+	ID string `json:"_id"`
+}
+
 type ClientAttributes map[string]string // TODO: is this actually just a {"key":"value"}?  not a {"key":["values"]}?
 
 type ClientProtocolMapperConfig struct {
@@ -397,11 +401,13 @@ type ResourceOwner struct {
 }
 
 type Resource struct {
-	Name   string         `json:"name,omitempty"`
-	Type   string         `json:"type,omitempty"`
-	Scopes ResourceScopes `json:"scopes"`
-	Owner  *ResourceOwner `json:"owner,omitempty"`
-	ID     string         `json:"_id,omitempty"`
+	Name               string         `json:"name,omitempty"`
+	Type               string         `json:"type,omitempty"`
+	Scopes             ResourceScopes `json:"scopes"`
+	Owner              *ResourceOwner `json:"owner,omitempty"`
+	OwnerManagedAccess bool           `json:"ownerManagedAccess"`
+	ID                 string         `json:"_id,omitempty"`
+	URIs               []string       `json:"uris,omitempty"`
 }
 
 type Resources []*Resource
@@ -416,7 +422,15 @@ func (m ResourceMap) IDs() []string {
 	return list
 }
 
-type ResourceServer struct {
+type ResourceCreate struct {
+	Name    string   `json:"name"`
+	IconURI string   `json:"icon_uri"`
+	Scopes  []*Scope `json:"scopes"`
+	Type    string   `json:"type"`
+	URI     string   `json:"uri"`
+}
+
+type ResourceServerOverview struct {
 	ID                            string    `json:"id"`
 	ClientID                      string    `json:"clientId"`
 	Name                          string    `json:"name"`
@@ -425,6 +439,7 @@ type ResourceServer struct {
 	Resources                     Resources `json:"resources"`
 	Policies                      Policies  `json:"policies"`
 	Scopes                        Scopes    `json:"scopes"`
+	DecisionStrategy              string    `json:"decisionStrategy"`
 }
 
 type RealmAttributes struct {
@@ -571,14 +586,16 @@ type PermissionConfig map[string]interface{}
 
 // Permission is returned by the "PermissionPath" overview call
 type Permission struct {
-	ID               string           `json:"id"`
+	ID               string           `json:"id,omitempty"`
 	Name             string           `json:"name"`
+	Description      string           `json:"description,omitempty"`
 	Type             string           `json:"type"`
 	Logic            string           `json:"logic"`
 	DecisionStrategy string           `json:"decisionStrategy"`
 	Config           PermissionConfig `json:"config"`
-	Description      string           `json:"description,omitempty"`
 }
+
+type Permissions []*Permission
 
 type PermissionMap map[string]*Permission
 
@@ -619,11 +636,11 @@ func (conf *PolicyConfig) UnmarshalJSON(buf []byte) error {
 type Policy struct {
 	ID               string       `json:"id,omitempty"`
 	Name             string       `json:"name,omitempty"`
+	Description      *string      `json:"description,omitempty"`
 	Type             string       `json:"type,omitempty"`
 	Logic            string       `json:"logic,omitempty"`
 	DecisionStrategy string       `json:"decisionStrategy,omitempty"`
 	Config           PolicyConfig `json:"config,omitempty"`
-	Description      string       `json:"description,omitempty"`
 }
 
 type Policies []*Policy
@@ -642,6 +659,14 @@ func (m PolicyMap) IDs() []string {
 	}
 	return list
 }
+
+type PolicyProvider struct {
+	Type  string `json:"type"`
+	Name  string `json:"name"`
+	Group string `json:"group"`
+}
+
+type PolicyProviders []*PolicyProvider
 
 type Role struct {
 	ID                 string `json:"id,omitempty"`
@@ -675,8 +700,17 @@ type RoleMapping struct {
 }
 
 type Scope struct {
-	ID   string `json:"id,omitempty"`
-	Name string `json:"name"`
+	ID              string                  `json:"id,omitempty"`
+	Name            string                  `json:"name"`
+	Attributes      KeyValuesMap            `json:"attributes"`
+	Description     *string                 `json:"description,omitempty"`
+	Protocol        *string                 `json:"protocol,omitempty"`
+	ProtocolMappers []*ClientProtocolMapper `json:"protocolMappers,omitempty"`
+}
+
+type MinimalScopeCreate struct {
+	Name    string `json:"name"`
+	IconURI string `json:"iconUri"`
 }
 
 type ScopeMap map[string]*Scope

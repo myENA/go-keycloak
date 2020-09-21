@@ -56,6 +56,20 @@ func (rs *AdminRolesService) Get(ctx context.Context, roleName string, mutators 
 	return role, nil
 }
 
+func (rs *AdminRolesService) GetByID(ctx context.Context, roleID string, mutators ...APIRequestMutator) (*Role, error) {
+	var (
+		resp *http.Response
+		role *Role
+		err  error
+	)
+	resp, err = rs.c.callAdminRealms(ctx, http.MethodGet, path.Join(kcPathPartRolesByID, roleID), nil, mutators...)
+	role = new(Role)
+	if err = handleResponse(resp, http.StatusOK, role, err); err != nil {
+		return nil, err
+	}
+	return role, nil
+}
+
 func (rs *AdminRolesService) Update(ctx context.Context, roleName string, role *Role, mutators ...APIRequestMutator) error {
 	resp, err := rs.c.callAdminRealms(ctx, http.MethodPut, path.Join(kcPathPartRoles, roleName), role, mutators...)
 	return handleResponse(resp, http.StatusOK, nil, err)
