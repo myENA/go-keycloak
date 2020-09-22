@@ -2,6 +2,7 @@ package keycloak
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"path"
 )
@@ -59,16 +60,30 @@ func (cs *AdminClientsService) Get(ctx context.Context, clientID string, mutator
 }
 
 // Create attempts to create a new client within
-func (cs *AdminClientsService) Create(ctx context.Context, client *ClientCreate, mutators ...APIRequestMutator) ([]string, error) {
+func (cs *AdminClientsService) Create(ctx context.Context, body *ClientCreate, mutators ...APIRequestMutator) ([]string, error) {
 	var (
 		resp *http.Response
 		err  error
 	)
-	resp, err = cs.c.callAdminRealms(ctx, http.MethodPost, kcPathPartClients, client, mutators...)
+	resp, err = cs.c.callAdminRealms(ctx, http.MethodPost, kcPathPartClients, body, mutators...)
 	if err = handleResponse(resp, http.StatusOK, nil, err); err != nil {
 		return nil, err
 	}
 	return parseResponseLocations(resp)
+}
+
+func (cs *AdminClientsService) CreateAndGet(ctx context.Context, body *ClientCreate, mutators ...APIRequestMutator) (*Client, error) {
+	var (
+		ids []string
+		err error
+	)
+	if ids, err = cs.Create(ctx, body, mutators...); err != nil {
+		return nil, err
+	}
+	if len(ids) != 1 {
+		return nil, fmt.Errorf("expected 1 id, found: %v", ids)
+	}
+	return cs.Get(ctx, ids[0], mutators...)
 }
 
 // Update attempts to update a  client in the Realm this client was created with
