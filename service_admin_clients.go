@@ -181,7 +181,7 @@ func (cas *AdminClientAuthzService) ResourceSearch(ctx context.Context, name str
 	return resource, nil
 }
 
-func (cas *AdminClientAuthzService) ResourceCreate(ctx context.Context, body *ResourceCreate, mutators ...APIRequestMutator) (*AdminCreateResponse, error) {
+func (cas *AdminClientAuthzService) ResourceCreate(ctx context.Context, body *ResourceCreateUpdateRequest, mutators ...APIRequestMutator) (*AdminCreateResponse, error) {
 	var (
 		resp *http.Response
 		res  *AdminCreateResponse
@@ -201,7 +201,7 @@ func (cas *AdminClientAuthzService) ResourceCreate(ctx context.Context, body *Re
 	return res, nil
 }
 
-func (cas *AdminClientAuthzService) ResourceUpdate(ctx context.Context, body *Resource, mutators ...APIRequestMutator) error {
+func (cas *AdminClientAuthzService) ResourceUpdate(ctx context.Context, body *ResourceCreateUpdateRequest, mutators ...APIRequestMutator) error {
 	resp, err := cas.c.callAdminRealms(
 		ctx,
 		http.MethodPut,

@@ -410,15 +410,17 @@ type EventsResponse struct {
 }
 
 type ResourceScope struct {
-	ID   string `json:"id,omitempty"`
-	Name string `json:"name,omitempty"`
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	DisplayName string `json:"displayName,omitempty"`
+	IconURI     string `json:"iconUri,omitempty"`
 }
 
 type ResourceScopes []ResourceScope
 
 type ResourceOwner struct {
-	ID   string `json:"id,omitempty"`
-	Name string `json:"name,omitempty"`
+	ID   string `json:"id"`
+	Name string `json:"name"`
 }
 
 type Resource struct {
@@ -432,16 +434,16 @@ type Resource struct {
 	IconURI            string         `json:"icon_uri"`
 
 	// TypedScopes - only returned with 3.4
-	TypedScopes ResourceScopes `json:"typedScopes,omitempty"`
+	TypedScopes ResourceScopes `json:"typedScope"`
 
 	// URI - only returned with 3.4
-	URI *string `json:"uri,omitempty"`
+	URI string `json:"uri"`
 
 	// URIs - only returned with 4.0+
-	URIs []string `json:"uris,omitempty"`
+	URIs []string `json:"uris"`
 
 	// Attributes - only returned with 4.0+
-	Attributes KeyValuesMap `json:"attributes,omitempty"`
+	Attributes KeyValuesMap `json:"attributes"`
 }
 
 type Resources []*Resource
@@ -456,7 +458,10 @@ func (m ResourceMap) IDs() []string {
 	return list
 }
 
-type ResourceCreate struct {
+type ResourceCreateUpdateRequest struct {
+	// ID - only used during update request
+	ID string `json:"_id,omitempty"`
+
 	IconURI string   `json:"icon_uri"`
 	Name    string   `json:"name"`
 	Scopes  []*Scope `json:"scopes"`
@@ -464,9 +469,9 @@ type ResourceCreate struct {
 
 	URI *string `json:"uri,omitempty"` // used by 3.4
 
-	DisplayName *string     `json:"displayName,omitempty"` // used by 4.0+
-	URIs        []string    `json:"uris,omitempty"`        // used by 4.0+
-	Attributes  KeyValueMap `json:"attributes,omitempty"`  // used by 4.0+
+	DisplayName *string      `json:"displayName,omitempty"` // used by 4.0+
+	URIs        []string     `json:"uris,omitempty"`        // used by 4.0+
+	Attributes  KeyValuesMap `json:"attributes,omitempty"`  // used by 4.0+
 }
 
 type ResourceServerOverview struct {
