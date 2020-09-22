@@ -827,6 +827,7 @@ type Scope struct {
 	ID          string `json:"id,omitempty"`
 	Name        string `json:"name"`
 	Description string `json:"description"`
+	IconURI     string `json:"iconUri"`
 
 	DisplayName string `json:"displayName"` // used by 4.0+
 
