@@ -672,21 +672,26 @@ func (conf *PolicyConfig) UnmarshalJSON(buf []byte) error {
 	return nil
 }
 
-type PolicyCreateRole struct {
+type PolicyRole struct {
 	ID       string `json:"id"`
 	Required bool   `json:"required"`
 }
 
-type PolicyCreate struct {
+type PolicyRoles []PolicyRole
+
+type PolicyCreateUpdateRequest struct {
+	// ID [optional] - only used during update call
+	ID string `json:"id,omitempty"`
+
 	// Type [required] - one of: role, js, time
 	Type             string `json:"type"`
-	DecisionStrategy string `json:"decisionStrategy"`
-	Logic            string `json:"logic"`
 	Name             string `json:"name"`
 	Description      string `json:"description"`
+	DecisionStrategy string `json:"decisionStrategy"`
+	Logic            string `json:"logic"`
 
 	// Roles [optional] - only used when type == "role"
-	Roles []PolicyCreateRole `json:"roles,omitempty"`
+	Roles PolicyRoles `json:"roles,omitempty"`
 
 	// Code [optional] - only used when type == "js"
 	Code *string `json:"code,omitempty"`
@@ -726,7 +731,7 @@ type Policy struct {
 	Code string `json:"code"`
 
 	// Roles - only returned when type == "role"
-	Roles Roles `json:"roles"`
+	Roles PolicyRoles `json:"roles"`
 
 	// Clients - list of client ids, only returned when type == "client"
 	Clients []string `json:"clients"`

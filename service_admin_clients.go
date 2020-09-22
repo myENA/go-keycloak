@@ -411,7 +411,7 @@ func (cas *AdminClientAuthzService) PolicySearch(ctx context.Context, name strin
 	return policy, nil
 }
 
-func (cas *AdminClientAuthzService) PolicyCreateRole(ctx context.Context, body *PolicyCreate, mutators ...APIRequestMutator) (*Policy, error) {
+func (cas *AdminClientAuthzService) PolicyCreate(ctx context.Context, body *PolicyCreateUpdateRequest, mutators ...APIRequestMutator) (*Policy, error) {
 	var (
 		resp   *http.Response
 		policy *Policy
@@ -429,6 +429,28 @@ func (cas *AdminClientAuthzService) PolicyCreateRole(ctx context.Context, body *
 		return nil, err
 	}
 	return policy, nil
+}
+
+func (cas *AdminClientAuthzService) PolicyUpdate(ctx context.Context, body *PolicyCreateUpdateRequest, mutators ...APIRequestMutator) error {
+	resp, err := cas.c.callAdminRealms(
+		ctx,
+		http.MethodPut,
+		path.Join(kcPathPartClients, cas.clientID, kcPathPartAuthz, kcPathPartResourceServer, kcPathPartPolicy, body.ID),
+		body,
+		mutators...,
+	)
+	return handleResponse(resp, http.StatusCreated, nil, err)
+}
+
+func (cas *AdminClientAuthzService) PolicyDelete(ctx context.Context, policyID string, mutators ...APIRequestMutator) error {
+	resp, err := cas.c.callAdminRealms(
+		ctx,
+		http.MethodDelete,
+		path.Join(kcPathPartClients, cas.clientID, kcPathPartAuthz, kcPathPartResourceServer, kcPathPartPolicy, policyID),
+		nil,
+		mutators...,
+	)
+	return handleResponse(resp, http.StatusCreated, nil, err)
 }
 
 func (cas *AdminClientAuthzService) Permissions(ctx context.Context, first, max int, mutators ...APIRequestMutator) (Permissions, error) {
