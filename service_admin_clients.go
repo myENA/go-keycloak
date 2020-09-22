@@ -18,7 +18,7 @@ func (c *AdminAPIClient) ClientsService() *AdminClientsService {
 }
 
 // List attempts to return a list of all  clients available in the Realm this client was created with
-func (cs *AdminClientsService) List(ctx context.Context, clientID string, viewableOnly bool, mutators ...APIRequestMutator) (Clients, error) {
+func (cs *AdminClientsService) List(ctx context.Context, clientID string, viewableOnly bool, first, max int, mutators ...APIRequestMutator) (Clients, error) {
 	var (
 		resp    *http.Response
 		clients Clients
@@ -33,6 +33,8 @@ func (cs *AdminClientsService) List(ctx context.Context, clientID string, viewab
 			mutators,
 			NonZeroQueryMutator("clientId", clientID, nil, true),
 			NonZeroQueryMutator("viewableOnly", viewableOnly, nil, true),
+			QueryMutator("first", first, true),
+			NonZeroQueryMutator("max", max, 20, true),
 		)...)
 	clients = make(Clients, 0)
 	if err = handleResponse(resp, http.StatusOK, &clients, err); err != nil {

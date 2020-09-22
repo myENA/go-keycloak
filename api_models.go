@@ -60,8 +60,6 @@ type AdminCreateResponse struct {
 	ID string `json:"_id"`
 }
 
-type ClientAttributes map[string]string // TODO: is this actually just a {"key":"value"}?  not a {"key":["values"]}?
-
 type ClientProtocolMapperConfig struct {
 	AccessTokenClaim   string `json:"access.token.claim"`
 	ClaimName          string `json:"claim.name"`
@@ -91,9 +89,12 @@ type Client struct {
 	ID                           string                  `json:"id"`
 	ClientID                     string                  `json:"clientId"`
 	Name                         string                  `json:"name"`
+	RootURL                      string                  `json:"rootUrl"`
+	AdminURL                     string                  `json:"adminUrl"`
 	Description                  string                  `json:"description"`
 	SurrogateAuthRequired        bool                    `json:"surrogateAuthRequired"`
 	Enabled                      bool                    `json:"enabled"`
+	AlwaysDisplayInConsole       bool                    `json:"alwaysDisplayInConsole"`
 	ClientAuthenticatorType      string                  `json:"clientAuthenticatorType"`
 	RedirectUris                 []string                `json:"redirectUris"`
 	WebOrigins                   []string                `json:"webOrigins"`
@@ -106,26 +107,30 @@ type Client struct {
 	ServiceAccountsEnabled       bool                    `json:"serviceAccountsEnabled"`
 	AuthorizationServicesEnabled bool                    `json:"authorizationServicesEnabled"`
 	PublicClient                 bool                    `json:"publicClient"`
-	FrontchannelLogout           bool                    `json:"frontchannelLogout"`
+	FrontChannelLogout           bool                    `json:"frontchannelLogout"`
 	Protocol                     string                  `json:"protocol"`
-	Attributes                   ClientAttributes        `json:"attributes"`
 	FullScopeAllowed             bool                    `json:"fullScopeAllowed"`
 	NodeReRegistrationTimeout    int                     `json:"nodeReRegistrationTimeout"`
 	ProtocolMappers              []*ClientProtocolMapper `json:"protocolMappers"`
 	UseTemplateConfig            bool                    `json:"useTemplateConfig"`
 	UseTemplateScope             bool                    `json:"useTemplateScope"`
 	UseTemplateMappers           bool                    `json:"useTemplateMappers"`
-	Access                       *ClientAccess           `json:"access"`
+	Access                       ClientAccess            `json:"access"`
+	DefaultClientScopes          []string                `json:"defaultClientScopes"`
+	OptionalClientScopes         []string                `json:"optionalClientScopes"`
+
+	// todo: is this k => string or k => []string?
+	// Attributes                   KeyValueMap             `json:"attributes"`
 }
 
 type Clients []*Client
 
 type ClientCreate struct {
-	Attributes   ClientAttributes `json:"attributes"`
-	ClientID     string           `json:"clientId"`
-	Enabled      bool             `json:"enabled"`
-	Protocol     string           `json:"protocol"`
-	RedirectUris []string         `json:"redirectUris"`
+	ClientID     string   `json:"clientId"`
+	Enabled      bool     `json:"enabled"`
+	Protocol     string   `json:"protocol"`
+	RedirectUris []string `json:"redirectUris"`
+	RootURL      string   `json:"rootURL"`
 }
 
 type OpenIDConfiguration struct {
