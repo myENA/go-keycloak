@@ -70,13 +70,13 @@ type ClientProtocolMapperConfig struct {
 }
 
 type ClientProtocolMapper struct {
-	Config          *ClientProtocolMapperConfig `json:"config"`
-	ConsentRequired bool                        `json:"consentRequired"`
-	ConsentText     string                      `json:"consentText"`
-	ID              string                      `json:"id"`
-	Name            string                      `json:"name"`
-	Protocol        string                      `json:"protocol"`
-	ProtocolMapper  string                      `json:"protocolMapper"`
+	Config          ClientProtocolMapperConfig `json:"config"`
+	ConsentRequired bool                       `json:"consentRequired"`
+	ConsentText     string                     `json:"consentText"`
+	ID              string                     `json:"id"`
+	Name            string                     `json:"name"`
+	Protocol        string                     `json:"protocol"`
+	ProtocolMapper  string                     `json:"protocolMapper"`
 }
 
 type ClientAccess struct {
@@ -86,52 +86,48 @@ type ClientAccess struct {
 }
 
 type Client struct {
-	ID                           string                  `json:"id"`
-	ClientID                     string                  `json:"clientId"`
-	Name                         string                  `json:"name"`
-	RootURL                      string                  `json:"rootUrl"`
-	AdminURL                     string                  `json:"adminUrl"`
-	Description                  string                  `json:"description"`
-	SurrogateAuthRequired        bool                    `json:"surrogateAuthRequired"`
-	Enabled                      bool                    `json:"enabled"`
-	AlwaysDisplayInConsole       bool                    `json:"alwaysDisplayInConsole"`
-	ClientAuthenticatorType      string                  `json:"clientAuthenticatorType"`
-	RedirectUris                 []string                `json:"redirectUris"`
-	WebOrigins                   []string                `json:"webOrigins"`
-	NotBefore                    int                     `json:"notBefore"`
-	BearerOnly                   bool                    `json:"bearerOnly"`
-	ConsentRequired              bool                    `json:"consentRequired"`
-	StandardFlowEnabled          bool                    `json:"standardFlowEnabled"`
-	ImplicitFlowEnabled          bool                    `json:"implicitFlowEnabled"`
-	DirectAccessGrantsEnabled    bool                    `json:"directAccessGrantsEnabled"`
-	ServiceAccountsEnabled       bool                    `json:"serviceAccountsEnabled"`
-	AuthorizationServicesEnabled bool                    `json:"authorizationServicesEnabled"`
-	PublicClient                 bool                    `json:"publicClient"`
-	FrontChannelLogout           bool                    `json:"frontchannelLogout"`
-	Protocol                     string                  `json:"protocol"`
-	FullScopeAllowed             bool                    `json:"fullScopeAllowed"`
-	NodeReRegistrationTimeout    int                     `json:"nodeReRegistrationTimeout"`
-	ProtocolMappers              []*ClientProtocolMapper `json:"protocolMappers"`
-	UseTemplateConfig            bool                    `json:"useTemplateConfig"`
-	UseTemplateScope             bool                    `json:"useTemplateScope"`
-	UseTemplateMappers           bool                    `json:"useTemplateMappers"`
-	Access                       ClientAccess            `json:"access"`
-	DefaultClientScopes          []string                `json:"defaultClientScopes"`
-	OptionalClientScopes         []string                `json:"optionalClientScopes"`
-
-	// todo: is this k => string or k => []string?
-	// Attributes                   KeyValueMap             `json:"attributes"`
+	Access                       ClientAccess           `json:"access"`
+	AdminURL                     string                 `json:"adminUrl"`
+	AlwaysDisplayInConsole       bool                   `json:"alwaysDisplayInConsole"`
+	Attributes                   KeyValueMap            `json:"attributes"`
+	AuthenticationFlowBindings   interface{}            `json:"authenticationFlowBindings"`
+	AuthorizationServicesEnabled bool                   `json:"authorizationServicesEnabled"`
+	BearerOnly                   bool                   `json:"bearerOnly"`
+	ClientAuthenticatorType      string                 `json:"clientAuthenticatorType"`
+	ClientID                     string                 `json:"clientId"`
+	ConsentRequired              bool                   `json:"consentRequired"`
+	DefaultClientScopes          []string               `json:"defaultClientScopes"`
+	Description                  string                 `json:"description"`
+	DirectAccessGrantsEnabled    bool                   `json:"directAccessGrantsEnabled"`
+	Enabled                      bool                   `json:"enabled"`
+	FrontChannelLogout           bool                   `json:"frontchannelLogout"`
+	FullScopeAllowed             bool                   `json:"fullScopeAllowed"`
+	ID                           string                 `json:"id"`
+	ImplicitFlowEnabled          bool                   `json:"implicitFlowEnabled"`
+	Name                         string                 `json:"name"`
+	NodeReRegistrationTimeout    int                    `json:"nodeReRegistrationTimeout"`
+	NotBefore                    int                    `json:"notBefore"`
+	OptionalClientScopes         []string               `json:"optionalClientScopes"`
+	Protocol                     string                 `json:"protocol"`
+	ProtocolMappers              []ClientProtocolMapper `json:"protocolMappers"`
+	PublicClient                 bool                   `json:"publicClient"`
+	RedirectURIs                 []string               `json:"redirectUris"`
+	RootURL                      string                 `json:"rootUrl"`
+	ServiceAccountsEnabled       bool                   `json:"serviceAccountsEnabled"`
+	StandardFlowEnabled          bool                   `json:"standardFlowEnabled"`
+	SurrogateAuthRequired        bool                   `json:"surrogateAuthRequired"`
+	WebOrigins                   []string               `json:"webOrigins"`
 }
 
-type Clients []*Client
-
-type ClientCreate struct {
+type ClientCreateRequest struct {
 	ClientID     string   `json:"clientId"`
 	Enabled      bool     `json:"enabled"`
 	Protocol     string   `json:"protocol"`
 	RedirectUris []string `json:"redirectUris"`
 	RootURL      string   `json:"rootURL"`
 }
+
+type Clients []*Client
 
 type OpenIDConfiguration struct {
 	Issuer                                     string   `json:"issuer"`

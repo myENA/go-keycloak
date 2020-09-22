@@ -60,7 +60,7 @@ func (cs *AdminClientsService) Get(ctx context.Context, clientID string, mutator
 }
 
 // Create attempts to create a new client within
-func (cs *AdminClientsService) Create(ctx context.Context, body *ClientCreate, mutators ...APIRequestMutator) ([]string, error) {
+func (cs *AdminClientsService) Create(ctx context.Context, body *ClientCreateRequest, mutators ...APIRequestMutator) ([]string, error) {
 	var (
 		resp *http.Response
 		err  error
@@ -72,7 +72,7 @@ func (cs *AdminClientsService) Create(ctx context.Context, body *ClientCreate, m
 	return parseResponseLocations(resp)
 }
 
-func (cs *AdminClientsService) CreateAndGet(ctx context.Context, body *ClientCreate, mutators ...APIRequestMutator) (*Client, error) {
+func (cs *AdminClientsService) CreateAndGet(ctx context.Context, body *ClientCreateRequest, mutators ...APIRequestMutator) (*Client, error) {
 	var (
 		ids []string
 		err error
@@ -86,13 +86,11 @@ func (cs *AdminClientsService) CreateAndGet(ctx context.Context, body *ClientCre
 	return cs.Get(ctx, ids[0], mutators...)
 }
 
-// Update attempts to update a  client in the Realm this client was created with
-func (cs *AdminClientsService) Update(ctx context.Context, clientID string, client *Client, mutators ...APIRequestMutator) error {
-	resp, err := cs.c.callAdminRealms(ctx, http.MethodPut, path.Join(kcPathPartClients, clientID), client, mutators...)
+func (cs *AdminClientsService) Update(ctx context.Context, client *Client, mutators ...APIRequestMutator) error {
+	resp, err := cs.c.callAdminRealms(ctx, http.MethodPut, path.Join(kcPathPartClients, client.ID), client, mutators...)
 	return handleResponse(resp, http.StatusOK, nil, err)
 }
 
-// Delete attempts to delete a  client from the Realm this client was created with
 func (cs *AdminClientsService) Delete(ctx context.Context, clientID string, mutators ...APIRequestMutator) error {
 	resp, err := cs.c.callAdminRealms(ctx, http.MethodDelete, path.Join(kcPathPartClients, clientID), nil, mutators...)
 	return handleResponse(resp, http.StatusOK, nil, err)
