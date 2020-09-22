@@ -27,18 +27,10 @@ func RequestBearerToken(request *http.Request) (string, bool) {
 func parseResponseLocations(resp *http.Response) ([]string, error) {
 	locations, ok := resp.Header[httpHeaderLocationKey]
 	if !ok {
-		return nil, errors.New("unable to locate new InstallDocument in response")
+		return nil, errors.New("unable to locate new id in response")
 	}
 	if ll := len(locations); ll == 0 {
-		return nil, errors.New("unable to locate new InstallDocument in response")
-	}
-	return locations, nil
-}
-
-func parseAndReturnLocations(resp *http.Response) ([]string, error) {
-	locations, err := parseResponseLocations(resp)
-	if err != nil {
-		return nil, err
+		return nil, errors.New("unable to locate new id in response")
 	}
 	return locations, nil
 }

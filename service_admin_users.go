@@ -35,8 +35,8 @@ func (us *AdminUsersService) List(ctx context.Context, email, firstName, lastNam
 			NonZeroQueryMutator("lastName", lastName, nil, true),
 			NonZeroQueryMutator("username", username, nil, true),
 			NonZeroQueryMutator("search", search, nil, true),
-			NonZeroQueryMutator("first", first, nil, true),
-			NonZeroQueryMutator("max", max, nil, true),
+			QueryMutator("first", first, true),
+			NonZeroQueryMutator("max", max, 20, true),
 		)...)
 	users = make(Users, 0)
 	if err = handleResponse(resp, http.StatusOK, &users, err); err != nil {
@@ -82,7 +82,7 @@ func (us *AdminUsersService) Create(ctx context.Context, user *UserCreate, mutat
 	if err = handleResponse(resp, http.StatusOK, nil, err); err != nil {
 		return nil, err
 	}
-	return parseAndReturnLocations(resp)
+	return parseResponseLocations(resp)
 }
 
 // Update attempts to push an updated user definition

@@ -10,15 +10,11 @@ type AdminClientsService struct {
 	c *AdminAPIClient
 }
 
-func NewAdminClientsService(c *AdminAPIClient) *AdminClientsService {
+// RealmRoles returns a new admin clients service instance
+func (c *AdminAPIClient) ClientsService() *AdminClientsService {
 	cs := new(AdminClientsService)
 	cs.c = c
 	return cs
-}
-
-// List returns a new admin clients service instance
-func (c *AdminAPIClient) ClientsService() *AdminClientsService {
-	return NewAdminClientsService(c)
 }
 
 // List attempts to return a list of all  clients available in the Realm this client was created with
@@ -85,172 +81,16 @@ func (cs *AdminClientsService) Delete(ctx context.Context, clientID string, muta
 	return handleResponse(resp, http.StatusOK, nil, err)
 }
 
-// AdminClientRolesService contains all the methods needed to manage roles associated with a given client
-type AdminClientRolesService struct {
-	c        *AdminAPIClient
-	clientID string
-}
-
-func (c *AdminAPIClient) AdminClientRolesService(clientID string) *AdminClientRolesService {
-	rs := new(AdminClientRolesService)
-	rs.c = c
-	rs.clientID = clientID
-	return rs
-}
-
-// RolesService returns a new AdminClientRolesService use to manage roles associated with the provided client id
-func (cs *AdminClientsService) RolesService(clientID string) *AdminClientRolesService {
-	return cs.c.AdminClientRolesService(clientID)
-}
-
-// List attempts to return all the roles defined with the provided client id
-func (rs *AdminClientRolesService) List(ctx context.Context, first, max int, mutators ...APIRequestMutator) (Roles, error) {
-	var (
-		resp  *http.Response
-		roles Roles
-		err   error
-	)
-	resp, err = rs.c.callAdminRealms(
-		ctx,
-		http.MethodGet,
-		path.Join(kcPathPartClients, rs.clientID, kcPathPartRoles),
-		nil,
-		requestMutators(
-			mutators,
-			NonZeroQueryMutator("first", first, 0, true),
-			NonZeroQueryMutator("max", max, 20, true),
-		)...,
-	)
-	roles = make(Roles, 0)
-	if err = handleResponse(resp, http.StatusOK, &roles, err); err != nil {
-		return nil, err
-	}
-	return roles, nil
-}
-
-// Get attempts to locate a single role on a client by the role's name
-func (rs *AdminClientRolesService) Get(ctx context.Context, roleName string, mutators ...APIRequestMutator) (*Role, error) {
-	var (
-		resp *http.Response
-		role *Role
-		err  error
-	)
-	resp, err = rs.c.callAdminRealms(ctx, http.MethodGet, path.Join(kcPathPartClients, rs.clientID, kcPathPartRoles, roleName), nil, mutators...)
-	role = new(Role)
-	if err = handleResponse(resp, http.StatusOK, role, err); err != nil {
-		return nil, err
-	}
-	return role, nil
-}
-
-// Create attempts to create a new role for the provided client
-func (rs *AdminClientRolesService) Create(ctx context.Context, body *RoleCreateRequest, mutators ...APIRequestMutator) ([]string, error) {
-	var (
-		resp *http.Response
-		err  error
-	)
-	resp, err = rs.c.callAdminRealms(ctx, http.MethodPost, path.Join(kcPathPartClients, rs.clientID, kcPathPartRoles), body, mutators...)
-	if err = handleResponse(resp, http.StatusOK, nil, err); err != nil {
-		return nil, err
-	}
-	return parseResponseLocations(resp)
-}
-
-// Update attempts to update the provided role within
-func (rs *AdminClientRolesService) Update(ctx context.Context, roleName string, role *Role, mutators ...APIRequestMutator) error {
-	resp, err := rs.c.callAdminRealms(ctx, http.MethodPut, path.Join(kcPathPartClients, rs.clientID, kcPathPartRoles, roleName), role, mutators...)
-	return handleResponse(resp, http.StatusOK, nil, err)
-}
-
-// Delete attempts to delete the specified role
-func (rs *AdminClientRolesService) Delete(ctx context.Context, roleName string, mutators ...APIRequestMutator) error {
-	resp, err := rs.c.callAdminRealms(ctx, http.MethodDelete, path.Join(kcPathPartClients, rs.clientID, kcPathPartRoles, roleName), nil, mutators...)
-	return handleResponse(resp, http.StatusOK, nil, err)
-}
-
-// Users attempts to return a list of all the users who have the specified role within the keycloak realm
-func (rs *AdminClientRolesService) Users(ctx context.Context, roleName string, first, max int, mutators ...APIRequestMutator) (Users, error) {
-	var (
-		resp  *http.Response
-		users Users
-		err   error
-	)
-	resp, err = rs.c.callAdminRealms(
-		ctx,
-		http.MethodGet,
-		path.Join(kcPathPartClients, rs.clientID, kcPathPartRoles, roleName, kcPathPartUsers),
-		nil,
-		requestMutators(
-			mutators,
-			NonZeroQueryMutator("first", first, nil, true),
-			NonZeroQueryMutator("max", max, nil, true),
-		)...)
-	users = make(Users, 0)
-	if err = handleResponse(resp, http.StatusOK, &users, err); err != nil {
-		return nil, err
-	}
-	return users, nil
-}
-
-type AdminClientRoleCompositesService struct {
-	tc       *AdminAPIClient
-	clientID string
-	roleName string
-}
-
-func (c *AdminAPIClient) AdminClientRoleCompositesService(clientID, roleName string) *AdminClientRoleCompositesService {
-	crs := new(AdminClientRoleCompositesService)
-	crs.tc = c
-	crs.clientID = clientID
-	crs.roleName = roleName
-	return crs
-}
-
-func (rs *AdminClientRolesService) CompositesService(roleName string) *AdminClientRoleCompositesService {
-	return rs.c.AdminClientRoleCompositesService(rs.clientID, roleName)
-}
-
-// List attempts to return all composite roles that the specified role is a member of
-func (crs *AdminClientRoleCompositesService) List(ctx context.Context, mutators ...APIRequestMutator) (Roles, error) {
-	var (
-		resp  *http.Response
-		roles Roles
-		err   error
-	)
-	resp, err = crs.tc.callAdminRealms(ctx, http.MethodGet, path.Join(kcPathPartClients, crs.clientID, kcPathPartRoles, crs.roleName, kcPathPartComposites), nil, mutators...)
-	roles = make(Roles, 0)
-	if err = handleResponse(resp, http.StatusOK, &roles, err); err != nil {
-		return nil, err
-	}
-	return roles, nil
-}
-
-// Add attempts to add the specified role to the provided composite roles
-func (crs *AdminClientRoleCompositesService) Add(ctx context.Context, roles Roles, mutators ...APIRequestMutator) error {
-	resp, err := crs.tc.callAdminRealms(ctx, http.MethodPost, path.Join(kcPathPartClients, crs.clientID, kcPathPartRoles, crs.roleName, kcPathPartComposites), roles, mutators...)
-	return handleResponse(resp, http.StatusOK, nil, err)
-}
-
-// Remove attempts to remove the provided role from the specified composite roles
-func (crs *AdminClientRoleCompositesService) Remove(ctx context.Context, roles Roles, mutators ...APIRequestMutator) error {
-	resp, err := crs.tc.callAdminRealms(ctx, http.MethodDelete, path.Join(kcPathPartClients, crs.clientID, kcPathPartRoles, crs.roleName, kcPathPartComposites), roles, mutators...)
-	return handleResponse(resp, http.StatusOK, nil, err)
-}
-
 type AdminClientAuthzService struct {
 	c        *AdminAPIClient
 	clientID string
 }
 
-func NewAdminClientAuthzService(c *AdminAPIClient, clientID string) *AdminClientAuthzService {
+func (c *AdminAPIClient) ClientAuthzService(clientID string) *AdminClientAuthzService {
 	cs := new(AdminClientAuthzService)
 	cs.c = c
 	cs.clientID = clientID
 	return cs
-}
-
-func (c *AdminAPIClient) ClientAuthzService(clientID string) *AdminClientAuthzService {
-	return NewAdminClientAuthzService(c, clientID)
 }
 
 func (cas *AdminClientAuthzService) Overview(ctx context.Context, mutators ...APIRequestMutator) (*ResourceServerOverview, error) {
@@ -287,7 +127,7 @@ func (cas *AdminClientAuthzService) Resources(ctx context.Context, deep bool, fi
 		requestMutators(
 			mutators,
 			QueryMutator("deep", deep, true),
-			NonZeroQueryMutator("first", first, 0, true),
+			QueryMutator("first", first, true),
 			NonZeroQueryMutator("max", max, 20, true),
 		)...,
 	)
@@ -355,7 +195,7 @@ func (cas *AdminClientAuthzService) Scopes(ctx context.Context, deep bool, first
 		requestMutators(
 			mutators,
 			QueryMutator("deep", deep, true),
-			NonZeroQueryMutator("first", first, 0, true),
+			QueryMutator("first", first, true),
 			NonZeroQueryMutator("max", max, 20, true),
 			NonZeroQueryMutator("name", name, nil, true),
 		)...,
@@ -446,7 +286,7 @@ func (cas *AdminClientAuthzService) Policies(ctx context.Context, permission boo
 		requestMutators(
 			mutators,
 			QueryMutator("permission", permission, true),
-			NonZeroQueryMutator("first", first, 0, true),
+			QueryMutator("first", first, true),
 			NonZeroQueryMutator("max", max, 20, true),
 		)...,
 	)
@@ -573,7 +413,7 @@ func (cas *AdminClientAuthzService) Permissions(ctx context.Context, first, max 
 		nil,
 		requestMutators(
 			mutators,
-			NonZeroQueryMutator("first", first, 0, true),
+			QueryMutator("first", first, true),
 			NonZeroQueryMutator("max", max, 20, true),
 		)...,
 	)

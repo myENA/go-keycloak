@@ -33,8 +33,8 @@ func (gs *AdminGroupsService) List(ctx context.Context, search string, first, ma
 		requestMutators(
 			mutators,
 			NonZeroQueryMutator("search", search, nil, true),
-			NonZeroQueryMutator("first", first, nil, true),
-			NonZeroQueryMutator("max", max, nil, true),
+			QueryMutator("first", first, true),
+			NonZeroQueryMutator("max", max, 20, true),
 		)...)
 	if err != nil {
 		return nil, err
@@ -114,7 +114,7 @@ func (gs *AdminGroupsService) Create(ctx context.Context, group GroupCreate, mut
 	if err = handleResponse(resp, http.StatusOK, nil, err); err != nil {
 		return nil, err
 	}
-	return parseAndReturnLocations(resp)
+	return parseResponseLocations(resp)
 }
 
 // Delete attempts to delete a group from
