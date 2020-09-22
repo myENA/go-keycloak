@@ -2,6 +2,7 @@ package keycloak
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"path"
 )
@@ -76,6 +77,20 @@ func (rs *AdminRoleService) RealmRoleCreate(ctx context.Context, body *RoleCreat
 	return parseResponseLocations(resp)
 }
 
+func (rs *AdminRoleService) RealmRoleCreateAndGet(ctx context.Context, body *RoleCreateRequest, mutators ...APIRequestMutator) (*Role, error) {
+	var (
+		ids []string
+		err error
+	)
+	if ids, err = rs.RealmRoleCreate(ctx, body, mutators...); err != nil {
+		return nil, err
+	}
+	if len(ids) != 1 {
+		return nil, fmt.Errorf("expected 1 id in response, found %v", ids)
+	}
+	return rs.Get(ctx, ids[0], mutators...)
+}
+
 func (rs *AdminRoleService) ClientRoleCreate(ctx context.Context, clientID string, body *RoleCreateRequest, mutators ...APIRequestMutator) ([]string, error) {
 	var (
 		resp *http.Response
@@ -86,6 +101,20 @@ func (rs *AdminRoleService) ClientRoleCreate(ctx context.Context, clientID strin
 		return nil, err
 	}
 	return parseResponseLocations(resp)
+}
+
+func (rs *AdminRoleService) ClientRoleCreateAndGet(ctx context.Context, clientID string, body *RoleCreateRequest, mutators ...APIRequestMutator) (*Role, error) {
+	var (
+		ids []string
+		err error
+	)
+	if ids, err = rs.ClientRoleCreate(ctx, clientID, body, mutators...); err != nil {
+		return nil, err
+	}
+	if len(ids) != 1 {
+		return nil, fmt.Errorf("expected 1 id in response, found %v", ids)
+	}
+	return rs.Get(ctx, ids[0], mutators...)
 }
 
 func (rs *AdminRoleService) RealmRoleUsers(ctx context.Context, roleName string, first, max int, mutators ...APIRequestMutator) (Users, error) {
@@ -153,6 +182,13 @@ func (rs *AdminRoleService) Get(ctx context.Context, roleID string, mutators ...
 func (rs *AdminRoleService) Update(ctx context.Context, body *Role, mutators ...APIRequestMutator) error {
 	resp, err := rs.c.callAdminRealms(ctx, http.MethodPut, path.Join(kcPathPartRolesByID, body.ID), body, mutators...)
 	return handleResponse(resp, http.StatusNoContent, nil, err)
+}
+
+func (rs *AdminRoleService) UpdateAndGet(ctx context.Context, body *Role, mutators ...APIRequestMutator) (*Role, error) {
+	if err := rs.Update(ctx, body, mutators...); err != nil {
+		return nil, err
+	}
+	return rs.Get(ctx, body.ID, mutators...)
 }
 
 func (rs *AdminRoleService) Delete(ctx context.Context, roleID string, mutators ...APIRequestMutator) error {

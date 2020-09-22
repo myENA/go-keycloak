@@ -27,7 +27,7 @@ type APIRequestMutator func(*APIRequest) error
 //
 // This func is called inside the NonZeroQueryMutator func to determine if and how the provided value will be added to
 // a given request's query parameter string.
-type ParameterFormatterFunc func(destination, name string, value interface{}) (formatted string, use bool)
+type ParameterFormatterFunc func(location, name string, value interface{}) (formatted string, valued bool)
 
 // ParameterFormatter is called by the ValuedQueryParameter and ValuedHeaderFormatter funcs when determining
 // if and how values should be added to a given request

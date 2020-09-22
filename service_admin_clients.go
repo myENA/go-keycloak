@@ -138,6 +138,26 @@ func (cas *AdminClientAuthzService) Resources(ctx context.Context, deep bool, fi
 	return res, nil
 }
 
+func (cas *AdminClientAuthzService) Resource(ctx context.Context, resourceName string, mutators ...APIRequestMutator) (*Resource, error) {
+	var (
+		resp *http.Response
+		res  *Resource
+		err  error
+	)
+	resp, err = cas.c.callAdminRealms(
+		ctx,
+		http.MethodGet,
+		path.Join(kcPathPartClients, cas.clientID, kcPathPartAuthz, kcPathPartResourceServer, kcPathPartResource),
+		nil,
+		mutators...,
+	)
+	res = new(Resource)
+	if err = handleResponse(resp, http.StatusOK, res, err); err != nil {
+		return nil, err
+	}
+	return res, nil
+}
+
 func (cas *AdminClientAuthzService) ResourceSearch(ctx context.Context, name string, mutators ...APIRequestMutator) (*Resource, error) {
 	var (
 		resp     *http.Response
@@ -179,6 +199,17 @@ func (cas *AdminClientAuthzService) ResourceCreate(ctx context.Context, body *Re
 		return nil, err
 	}
 	return res, nil
+}
+
+func (cas *AdminClientAuthzService) ResourceUpdate(ctx context.Context, body *Resource, mutators ...APIRequestMutator) error {
+	resp, err := cas.c.callAdminRealms(
+		ctx,
+		http.MethodPut,
+		path.Join(kcPathPartClients, cas.clientID, kcPathPartAuthz, kcPathPartResourceServer, kcPathPartResource, body.ID),
+		body,
+		mutators...,
+	)
+	return handleResponse(resp, http.StatusNoContent, nil, err)
 }
 
 func (cas *AdminClientAuthzService) Scopes(ctx context.Context, deep bool, first, max int, name string, mutators ...APIRequestMutator) (Scopes, error) {
@@ -297,6 +328,26 @@ func (cas *AdminClientAuthzService) Policies(ctx context.Context, permission boo
 	return policies, nil
 }
 
+func (cas *AdminClientAuthzService) Policy(ctx context.Context, policyID string, mutators ...APIRequestMutator) (*Policy, error) {
+	var (
+		resp   *http.Response
+		policy *Policy
+		err    error
+	)
+	resp, err = cas.c.callAdminRealms(
+		ctx,
+		http.MethodGet,
+		path.Join(kcPathPartClients, cas.clientID, kcPathPartAuthz, kcPathPartResourceServer, kcPathPartPolicy, kcPathPartRole, policyID),
+		nil,
+		mutators...,
+	)
+	policy = new(Policy)
+	if err = handleResponse(resp, http.StatusOK, policy, err); err != nil {
+		return nil, err
+	}
+	return policy, nil
+}
+
 func (cas *AdminClientAuthzService) PolicyProviders(ctx context.Context, mutators ...APIRequestMutator) (PolicyProviders, error) {
 	var (
 		resp     *http.Response
@@ -315,26 +366,6 @@ func (cas *AdminClientAuthzService) PolicyProviders(ctx context.Context, mutator
 		return nil, err
 	}
 	return policies, nil
-}
-
-func (cas *AdminClientAuthzService) PolicyRoles(ctx context.Context, policyID string, mutators ...APIRequestMutator) (*Policy, error) {
-	var (
-		resp   *http.Response
-		policy *Policy
-		err    error
-	)
-	resp, err = cas.c.callAdminRealms(
-		ctx,
-		http.MethodGet,
-		path.Join(kcPathPartClients, cas.clientID, kcPathPartAuthz, kcPathPartResourceServer, kcPathPartPolicy, kcPathPartRole, policyID),
-		nil,
-		mutators...,
-	)
-	policy = new(Policy)
-	if err = handleResponse(resp, http.StatusOK, policy, err); err != nil {
-		return nil, err
-	}
-	return policy, nil
 }
 
 func (cas *AdminClientAuthzService) PolicyDependents(ctx context.Context, policyID string, mutators ...APIRequestMutator) (Policies, error) {

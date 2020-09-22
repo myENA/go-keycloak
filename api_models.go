@@ -414,7 +414,7 @@ type ResourceScope struct {
 	Name string `json:"name,omitempty"`
 }
 
-type ResourceScopes []*ResourceScope
+type ResourceScopes []ResourceScope
 
 type ResourceOwner struct {
 	ID   string `json:"id,omitempty"`
@@ -422,13 +422,26 @@ type ResourceOwner struct {
 }
 
 type Resource struct {
-	Name               string         `json:"name,omitempty"`
-	Type               string         `json:"type,omitempty"`
-	Scopes             ResourceScopes `json:"scopes"`
-	Owner              *ResourceOwner `json:"owner,omitempty"`
+	ID                 string         `json:"_id"`
+	Type               string         `json:"type"`
+	Owner              ResourceOwner  `json:"owner"`
 	OwnerManagedAccess bool           `json:"ownerManagedAccess"`
-	ID                 string         `json:"_id,omitempty"`
-	URIs               []string       `json:"uris,omitempty"`
+	DisplayName        string         `json:"displayName"`
+	Scopes             ResourceScopes `json:"scopes"`
+	Name               string         `json:"name"`
+	IconURI            string         `json:"icon_uri"`
+
+	// TypedScopes - only returned with 3.4
+	TypedScopes ResourceScopes `json:"typedScopes,omitempty"`
+
+	// URI - only returned with 3.4
+	URI *string `json:"uri,omitempty"`
+
+	// URIs - only returned with 4.0+
+	URIs []string `json:"uris,omitempty"`
+
+	// Attributes - only returned with 4.0+
+	Attributes KeyValuesMap `json:"attributes,omitempty"`
 }
 
 type Resources []*Resource
@@ -449,9 +462,9 @@ type ResourceCreate struct {
 	Scopes  []*Scope `json:"scopes"`
 	Type    string   `json:"type"`
 
-	URI string `json:"uri,omitempty"` // used by 3.4
+	URI *string `json:"uri,omitempty"` // used by 3.4
 
-	DisplayName string      `json:"displayName,omitempty"` // used by 4.0+
+	DisplayName *string     `json:"displayName,omitempty"` // used by 4.0+
 	URIs        []string    `json:"uris,omitempty"`        // used by 4.0+
 	Attributes  KeyValueMap `json:"attributes,omitempty"`  // used by 4.0+
 }
@@ -665,7 +678,7 @@ type PolicyCreateRole struct {
 }
 
 type PolicyCreate struct {
-	// Type [required] - one of: role, js,
+	// Type [required] - one of: role, js, time
 	Type             string `json:"type"`
 	DecisionStrategy string `json:"decisionStrategy"`
 	Logic            string `json:"logic"`
@@ -674,35 +687,37 @@ type PolicyCreate struct {
 
 	// Roles [optional] - only used when type == "role"
 	Roles []PolicyCreateRole `json:"roles,omitempty"`
+
 	// Code [optional] - only used when type == "js"
-	Code string `json:"code,omitempty"`
+	Code *string `json:"code,omitempty"`
+
 	// Clients [optional] - list of client ids, only used when type == "client"
 	Clients []string `json:"clients,omitempty"`
 
 	// -- start time policy fields
 	// each of the following fields are only usable when type == "time"
 
-	DayMonth     int         `json:"dayMonth,omitempty"`
-	DayMonthEnd  int         `json:"dayMonthEnd,omitempty"`
-	Hour         int         `json:"hour,omitempty"`
-	HourEnd      int         `json:"hourEnd,omitempty"`
-	Minute       int         `json:"minute,omitempty"`
-	MinuteEnd    int         `json:"minuteEnd,omitempty"`
-	Month        int         `json:"month,omitempty"`
-	MonthEnd     int         `json:"monthEnd,omitempty"`
+	DayMonth     *int        `json:"dayMonth,omitempty"`
+	DayMonthEnd  *int        `json:"dayMonthEnd,omitempty"`
+	Hour         *int        `json:"hour,omitempty"`
+	HourEnd      *int        `json:"hourEnd,omitempty"`
+	Minute       *int        `json:"minute,omitempty"`
+	MinuteEnd    *int        `json:"minuteEnd,omitempty"`
+	Month        *int        `json:"month,omitempty"`
+	MonthEnd     *int        `json:"monthEnd,omitempty"`
 	NotBefore    *PolicyTime `json:"notBefore,omitempty"`
 	NotOnOrAfter *PolicyTime `json:"notOnOrAfter,omitempty"`
-	Year         int         `json:"year,omitempty"`
-	YearEnd      int         `json:"yearEnd,omitempty"`
+	Year         *int        `json:"year,omitempty"`
+	YearEnd      *int        `json:"yearEnd,omitempty"`
 
 	// -- end time policy fields
 }
 
 type Policy struct {
 	ID               string       `json:"id"`
-	Name             string       `json:"name"`
-	Description      *string      `json:"description"`
 	Type             string       `json:"type"`
+	Name             string       `json:"name"`
+	Description      string       `json:"description"`
 	Logic            string       `json:"logic"`
 	DecisionStrategy string       `json:"decisionStrategy"`
 	Config           PolicyConfig `json:"config"`
@@ -816,27 +831,6 @@ type ScopeCreateUpdateRequest struct {
 	IconURI string `json:"iconUri"`
 
 	DisplayName string `json:"displayName,omitempty"` // used by 4.0+
-}
-
-type ScopeMap map[string]*Scope
-
-func (m ScopeMap) IDs() []string {
-	list := make([]string, 0, len(m))
-	for _, v := range m {
-		list = append(list, v.ID)
-	}
-	return list
-}
-
-func (m ScopeMap) NamedIDs() ResourceScopes {
-	list := make(ResourceScopes, 0, len(m))
-	for _, v := range m {
-		list = append(list, &ResourceScope{
-			Name: v.Name,
-			ID:   v.ID,
-		})
-	}
-	return list
 }
 
 type Scopes []*Scope
