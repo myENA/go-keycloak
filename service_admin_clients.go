@@ -33,7 +33,7 @@ func (cs *AdminClientsService) List(ctx context.Context, clientID string, viewab
 		http.MethodGet,
 		kcPathPartClients,
 		nil,
-		appendRequestMutators(
+		requestMutators(
 			mutators,
 			NonZeroQueryMutator("clientId", clientID, nil, true),
 			NonZeroQueryMutator("viewableOnly", viewableOnly, nil, true),
@@ -104,13 +104,23 @@ func (cs *AdminClientsService) RolesService(clientID string) *AdminClientRolesSe
 }
 
 // List attempts to return all the roles defined with the provided client id
-func (rs *AdminClientRolesService) List(ctx context.Context, mutators ...APIRequestMutator) (Roles, error) {
+func (rs *AdminClientRolesService) List(ctx context.Context, first, max int, mutators ...APIRequestMutator) (Roles, error) {
 	var (
 		resp  *http.Response
 		roles Roles
 		err   error
 	)
-	resp, err = rs.c.callAdminRealms(ctx, http.MethodGet, path.Join(kcPathPartClients, rs.clientID, kcPathPartRoles), nil, mutators...)
+	resp, err = rs.c.callAdminRealms(
+		ctx,
+		http.MethodGet,
+		path.Join(kcPathPartClients, rs.clientID, kcPathPartRoles),
+		nil,
+		requestMutators(
+			mutators,
+			NonZeroQueryMutator("first", first, 0, true),
+			NonZeroQueryMutator("max", max, 20, true),
+		)...,
+	)
 	roles = make(Roles, 0)
 	if err = handleResponse(resp, http.StatusOK, &roles, err); err != nil {
 		return nil, err
@@ -134,12 +144,12 @@ func (rs *AdminClientRolesService) Get(ctx context.Context, roleName string, mut
 }
 
 // Create attempts to create a new role for the provided client
-func (rs *AdminClientRolesService) Create(ctx context.Context, role *Role, mutators ...APIRequestMutator) ([]string, error) {
+func (rs *AdminClientRolesService) Create(ctx context.Context, body *RoleCreateRequest, mutators ...APIRequestMutator) ([]string, error) {
 	var (
 		resp *http.Response
 		err  error
 	)
-	resp, err = rs.c.callAdminRealms(ctx, http.MethodPost, path.Join(kcPathPartClients, rs.clientID, kcPathPartRoles), role, mutators...)
+	resp, err = rs.c.callAdminRealms(ctx, http.MethodPost, path.Join(kcPathPartClients, rs.clientID, kcPathPartRoles), body, mutators...)
 	if err = handleResponse(resp, http.StatusOK, nil, err); err != nil {
 		return nil, err
 	}
@@ -154,7 +164,7 @@ func (rs *AdminClientRolesService) Update(ctx context.Context, roleName string, 
 
 // Delete attempts to delete the specified role
 func (rs *AdminClientRolesService) Delete(ctx context.Context, roleName string, mutators ...APIRequestMutator) error {
-	resp, err := rs.c.callAdminRealms(ctx, http.MethodPut, path.Join(kcPathPartClients, rs.clientID, kcPathPartRoles, roleName), nil, mutators...)
+	resp, err := rs.c.callAdminRealms(ctx, http.MethodDelete, path.Join(kcPathPartClients, rs.clientID, kcPathPartRoles, roleName), nil, mutators...)
 	return handleResponse(resp, http.StatusOK, nil, err)
 }
 
@@ -170,7 +180,7 @@ func (rs *AdminClientRolesService) Users(ctx context.Context, roleName string, f
 		http.MethodGet,
 		path.Join(kcPathPartClients, rs.clientID, kcPathPartRoles, roleName, kcPathPartUsers),
 		nil,
-		appendRequestMutators(
+		requestMutators(
 			mutators,
 			NonZeroQueryMutator("first", first, nil, true),
 			NonZeroQueryMutator("max", max, nil, true),
@@ -274,7 +284,7 @@ func (cas *AdminClientAuthzService) Resources(ctx context.Context, deep bool, fi
 		http.MethodGet,
 		path.Join(kcPathPartClients, cas.clientID, kcPathPartAuthz, kcPathPartResourceServer, kcPathPartResource),
 		nil,
-		appendRequestMutators(
+		requestMutators(
 			mutators,
 			QueryMutator("deep", deep, true),
 			NonZeroQueryMutator("first", first, 0, true),
@@ -299,7 +309,7 @@ func (cas *AdminClientAuthzService) ResourceSearch(ctx context.Context, name str
 		http.MethodGet,
 		path.Join(kcPathPartClients, cas.clientID, kcPathPartAuthz, kcPathPartResourceServer, kcPathPartResource, kcPathPartSearch),
 		nil,
-		appendRequestMutators(
+		requestMutators(
 			mutators,
 			QueryMutator("name", name, true),
 		)...,
@@ -342,7 +352,7 @@ func (cas *AdminClientAuthzService) Scopes(ctx context.Context, deep bool, first
 		http.MethodGet,
 		path.Join(kcPathPartClients, cas.clientID, kcPathPartAuthz, kcPathPartResourceServer, kcPathPartScope),
 		nil,
-		appendRequestMutators(
+		requestMutators(
 			mutators,
 			QueryMutator("deep", deep, true),
 			NonZeroQueryMutator("first", first, 0, true),
@@ -368,7 +378,7 @@ func (cas *AdminClientAuthzService) ScopeSearch(ctx context.Context, name string
 		http.MethodGet,
 		path.Join(kcPathPartClients, cas.clientID, kcPathPartAuthz, kcPathPartResourceServer, kcPathPartScope, kcPathPartSearch),
 		nil,
-		appendRequestMutators(
+		requestMutators(
 			mutators,
 			QueryMutator("name", name, true),
 		)...,
@@ -380,7 +390,7 @@ func (cas *AdminClientAuthzService) ScopeSearch(ctx context.Context, name string
 	return scope, nil
 }
 
-func (cas *AdminClientAuthzService) ScopeCreate(ctx context.Context, body *MinimalScopeCreate, mutators ...APIRequestMutator) (*Scope, error) {
+func (cas *AdminClientAuthzService) ScopeCreate(ctx context.Context, body *ScopeCreateUpdateRequest, mutators ...APIRequestMutator) (*Scope, error) {
 	var (
 		resp  *http.Response
 		scope *Scope
@@ -400,6 +410,28 @@ func (cas *AdminClientAuthzService) ScopeCreate(ctx context.Context, body *Minim
 	return scope, nil
 }
 
+func (cas *AdminClientAuthzService) ScopeUpdate(ctx context.Context, body *ScopeCreateUpdateRequest, mutators ...APIRequestMutator) error {
+	resp, err := cas.c.callAdminRealms(
+		ctx,
+		http.MethodPut,
+		path.Join(kcPathPartClients, cas.clientID, kcPathPartAuthz, kcPathPartResourceServer, kcPathPartScope, body.ID),
+		body,
+		mutators...,
+	)
+	return handleResponse(resp, http.StatusNoContent, nil, err)
+}
+
+func (cas *AdminClientAuthzService) ScopeDelete(ctx context.Context, scopeID string, mutators ...APIRequestMutator) error {
+	resp, err := cas.c.callAdminRealms(
+		ctx,
+		http.MethodDelete,
+		path.Join(kcPathPartClients, cas.clientID, kcPathPartAuthz, kcPathPartResourceServer, kcPathPartScope, scopeID),
+		nil,
+		mutators...,
+	)
+	return handleResponse(resp, http.StatusNoContent, nil, err)
+}
+
 func (cas *AdminClientAuthzService) Policies(ctx context.Context, permission bool, first, max int, mutators ...APIRequestMutator) (Policies, error) {
 	var (
 		resp     *http.Response
@@ -411,7 +443,7 @@ func (cas *AdminClientAuthzService) Policies(ctx context.Context, permission boo
 		http.MethodGet,
 		path.Join(kcPathPartClients, cas.clientID, kcPathPartAuthz, kcPathPartResourceServer, kcPathPartPolicy),
 		nil,
-		appendRequestMutators(
+		requestMutators(
 			mutators,
 			QueryMutator("permission", permission, true),
 			NonZeroQueryMutator("first", first, 0, true),
@@ -496,7 +528,7 @@ func (cas *AdminClientAuthzService) PolicySearch(ctx context.Context, name strin
 		http.MethodGet,
 		path.Join(kcPathPartClients, cas.clientID, kcPathPartAuthz, kcPathPartResourceServer, kcPathPartPolicy),
 		nil,
-		appendRequestMutators(
+		requestMutators(
 			mutators,
 			QueryMutator("name", name, true),
 		)...,
@@ -539,7 +571,7 @@ func (cas *AdminClientAuthzService) Permissions(ctx context.Context, first, max 
 		http.MethodGet,
 		path.Join(kcPathPartClients, cas.clientID, kcPathPartAuthz, kcPathPartResourceServer, kcPathPartPermission),
 		nil,
-		appendRequestMutators(
+		requestMutators(
 			mutators,
 			NonZeroQueryMutator("first", first, 0, true),
 			NonZeroQueryMutator("max", max, 20, true),

@@ -30,7 +30,7 @@ func (gs *AdminGroupsService) List(ctx context.Context, search string, first, ma
 		http.MethodGet,
 		kcPathPartGroups,
 		nil,
-		appendRequestMutators(
+		requestMutators(
 			mutators,
 			NonZeroQueryMutator("search", search, nil, true),
 			NonZeroQueryMutator("first", first, nil, true),
@@ -61,7 +61,7 @@ func (gs *AdminGroupsService) Count(ctx context.Context, search string, top bool
 		http.MethodGet,
 		path.Join(kcPathPartGroups, kcPathPartCount),
 		nil,
-		appendRequestMutators(
+		requestMutators(
 			mutators,
 			NonZeroQueryMutator("search", search, nil, true),
 			NonZeroQueryMutator("top", strconv.FormatBool(top), nil, true),

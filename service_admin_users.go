@@ -28,7 +28,7 @@ func (us *AdminUsersService) List(ctx context.Context, email, firstName, lastNam
 		http.MethodGet,
 		kcPathPartUsers,
 		nil,
-		appendRequestMutators(
+		requestMutators(
 			mutators,
 			NonZeroQueryMutator("email", email, nil, true),
 			NonZeroQueryMutator("firstName", firstName, nil, true),

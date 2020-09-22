@@ -70,6 +70,11 @@ func (rs *AdminRolesService) GetByID(ctx context.Context, roleID string, mutator
 	return role, nil
 }
 
+func (rs *AdminRolesService) DeleteByID(ctx context.Context, roleID string, mutators ...APIRequestMutator) error {
+	resp, err := rs.c.callAdminRealms(ctx, http.MethodDelete, path.Join(kcPathPartRolesByID, roleID), nil, mutators...)
+	return handleResponse(resp, http.StatusNoContent, nil, err)
+}
+
 func (rs *AdminRolesService) Update(ctx context.Context, roleName string, role *Role, mutators ...APIRequestMutator) error {
 	resp, err := rs.c.callAdminRealms(ctx, http.MethodPut, path.Join(kcPathPartRoles, roleName), role, mutators...)
 	return handleResponse(resp, http.StatusOK, nil, err)

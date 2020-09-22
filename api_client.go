@@ -318,7 +318,7 @@ func (c *APIClient) Call(ctx context.Context, authenticated bool, method, reques
 		if am, err = c.ap.AuthMutators(ctx, c); err != nil {
 			return nil, err
 		}
-		mutators = appendRequestMutators(mutators, am...)
+		mutators = requestMutators(mutators, am...)
 	}
 
 	req = NewAPIRequest(method, requestURL)
@@ -473,7 +473,7 @@ func (c *APIClient) openIDConnectToken(ctx context.Context, authenticated bool, 
 		http.MethodPost,
 		env.TokenEndpoint(),
 		body,
-		appendRequestMutators(mutators, HeaderMutator(httpHeaderContentType, httpHeaderValueFormURLEncoded, true))...,
+		requestMutators(mutators, HeaderMutator(httpHeaderContentType, httpHeaderValueFormURLEncoded, true))...,
 	)
 	if req.ResponseMode == nil {
 		model = new(OpenIDConnectToken)

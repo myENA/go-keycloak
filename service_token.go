@@ -75,7 +75,7 @@ func (ts *TokenService) PermissionEvaluation(ctx context.Context, req *OpenIDCon
 		http.MethodPost,
 		env.TokenEndpoint(),
 		strings.NewReader(body.Encode()),
-		appendRequestMutators(mutators, HeaderMutator(httpHeaderContentType, httpHeaderValueFormURLEncoded, true))...)
+		requestMutators(mutators, HeaderMutator(httpHeaderContentType, httpHeaderValueFormURLEncoded, true))...)
 	perms = make(EvaluatedPermissions, 0)
 	if err = handleResponse(resp, http.StatusOK, &perms, err); err != nil {
 		return nil, err
@@ -153,7 +153,7 @@ func (ts *TokenService) IntrospectRequestingPartyToken(ctx context.Context, rawR
 		http.MethodPost,
 		env.IntrospectionEndpoint(),
 		strings.NewReader(body.Encode()),
-		appendRequestMutators(mutators, HeaderMutator(httpHeaderContentType, httpHeaderValueFormURLEncoded, true))...,
+		requestMutators(mutators, HeaderMutator(httpHeaderContentType, httpHeaderValueFormURLEncoded, true))...,
 	)
 	results = new(TokenIntrospectionResults)
 	if err = handleResponse(resp, http.StatusOK, results, err); err != nil {

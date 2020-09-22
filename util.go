@@ -143,9 +143,9 @@ func copyStrs(src []string) []string {
 	return dst
 }
 
-func appendRequestMutators(root []APIRequestMutator, m ...APIRequestMutator) []APIRequestMutator {
+func requestMutators(root []APIRequestMutator, in ...APIRequestMutator) []APIRequestMutator {
 	if root == nil {
 		root = make([]APIRequestMutator, 0)
 	}
-	return append(root, m...)
+	return append(root, in...)
 }

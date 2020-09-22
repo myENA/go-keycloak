@@ -757,21 +757,30 @@ type PolicyProvider struct {
 
 type PolicyProviders []*PolicyProvider
 
+type RoleCreateRequest struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+
+	// ScopeParamRequired [optional] - seemingly only used by 3.4
+	ScopeParamRequired *bool `json:"scopeParamRequired,omitempty"`
+}
+
 type Role struct {
-	ID                 string `json:"id,omitempty"`
-	Name               string `json:"name,omitempty"`
-	Parent             string `json:"parent,omitempty"`
-	Description        string `json:"description,omitempty"`
-	Logic              string `json:"logic,omitempty"`
-	DecisionStrategy   string `json:"decisionStrategy,omitempty"`
-	ScopeParamRequired bool   `json:"scopeParamRequired"`
-	Composite          bool   `json:"composite,omitempty"`
-	Client             string `json:"client,omitempty"`
-	ClientRole         bool   `json:"clientRole,omitempty"`
-	ContainerID        string `json:"containerId,omitempty"`
-	Type               string `json:"type,omitempty"`
-	Required           bool   `json:"required,omitempty"`
-	Mappings           Roles  `json:"mappings,omitempty"`
+	ID                 string       `json:"id"`
+	Name               string       `json:"name"`
+	Parent             string       `json:"parent"`
+	Description        string       `json:"description"`
+	Logic              string       `json:"logic"`
+	DecisionStrategy   string       `json:"decisionStrategy"`
+	ScopeParamRequired bool         `json:"scopeParamRequired"`
+	Composite          bool         `json:"composite"`
+	Client             string       `json:"client"`
+	ClientRole         bool         `json:"clientRole"`
+	ContainerID        string       `json:"containerId"`
+	Type               string       `json:"type"`
+	Required           bool         `json:"required"`
+	Mappings           Roles        `json:"mappings"`
+	Attributes         KeyValuesMap `json:"attributes"`
 }
 
 type RoleMap map[string]*Role
@@ -789,17 +798,20 @@ type RoleMapping struct {
 }
 
 type Scope struct {
-	ID              string                 `json:"id"`
-	Name            string                 `json:"name"`
-	Attributes      KeyValuesMap           `json:"attributes"`
-	Description     string                 `json:"description"`
-	Protocol        string                 `json:"protocol,omitempty"`
-	ProtocolMappers []ClientProtocolMapper `json:"protocolMappers"`
+	ID          string `json:"id,omitempty"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
 
 	DisplayName string `json:"displayName"` // used by 4.0+
+
+	Attributes      KeyValuesMap           `json:"attributes"`
+	Protocol        string                 `json:"protocol"`
+	ProtocolMappers []ClientProtocolMapper `json:"protocolMappers"`
 }
 
-type MinimalScopeCreate struct {
+type ScopeCreateUpdateRequest struct {
+	// ID [optional] - unused by create request, unused by 3.4 update request, but used by 4.0+ update request
+	ID      string `json:"id,omitempty"`
 	Name    string `json:"name"`
 	IconURI string `json:"iconUri"`
 
