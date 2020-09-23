@@ -678,6 +678,10 @@ type PermissionCreateUpdateRequest struct {
 	//	- only used when type == "resource"
 	//	- mutually exclusive with "resources"
 	ResourceType *string `json:"resourceType,omitempty"`
+
+	// Scopes - list of scope ids
+	//	- only used when type == "scope" (ui lists this as "role based")
+	Scopes []string `json:"scopes,omitempty"`
 }
 
 type PermissionScope struct {
