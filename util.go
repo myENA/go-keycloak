@@ -118,6 +118,7 @@ func handleResponse(httpResp *http.Response, successCode int, modelPtr interface
 				*b = tmp
 			}
 		} else if err := json.NewDecoder(httpResp.Body).Decode(modelPtr); err != nil && err != io.EOF {
+			// todo: handle "empty" responses better.
 			// ... and this query has a modeled response, attempt to unmarshal into that type
 			finalErr = fmt.Errorf("error unmarshalling response body into %T: %w", modelPtr, err)
 		}
@@ -140,4 +141,15 @@ func requestMutators(root []APIRequestMutator, in ...APIRequestMutator) []APIReq
 		root = make([]APIRequestMutator, 0)
 	}
 	return append(root, in...)
+}
+
+func permissionModifyPath(body *PermissionCreateUpdateRequest) (string, error) {
+	switch body.Type {
+	case PermissionTypeResource:
+		return kcPathPartResource, nil
+	case PermissionTypeRole:
+		return kcPathPartScope, nil
+	default:
+		return "", errors.New("field \"type\" must be provided in request body")
+	}
 }

@@ -19,9 +19,10 @@ func (c *AdminAPIClient) UsersService() *AdminUsersService {
 // List attempts to retrieve a list of users from
 func (us *AdminUsersService) List(ctx context.Context, email, firstName, lastName, username, search string, first, max int, mutators ...APIRequestMutator) (Users, error) {
 	var (
-		resp  *http.Response
-		users Users
-		err   error
+		resp *http.Response
+		err  error
+
+		users = make(Users, 0)
 	)
 	resp, err = us.c.callAdminRealms(
 		ctx,
@@ -38,7 +39,6 @@ func (us *AdminUsersService) List(ctx context.Context, email, firstName, lastNam
 			QueryMutator("first", first, true),
 			NonZeroQueryMutator("max", max, 20, true),
 		)...)
-	users = make(Users, 0)
 	if err = handleResponse(resp, http.StatusOK, &users, err); err != nil {
 		return nil, err
 	}
@@ -61,11 +61,11 @@ func (us *AdminUsersService) Count(ctx context.Context, mutators ...APIRequestMu
 func (us *AdminUsersService) Get(ctx context.Context, userID string, mutators ...APIRequestMutator) (*User, error) {
 	var (
 		resp *http.Response
-		user *User
 		err  error
+
+		user = new(User)
 	)
 	resp, err = us.c.callAdminRealms(ctx, http.MethodGet, path.Join(kcPathPartUsers, userID), nil, mutators...)
-	user = new(User)
 	if err = handleResponse(resp, http.StatusOK, user, err); err != nil {
 		return nil, err
 	}
@@ -116,12 +116,12 @@ func (us *AdminUsersService) GroupsService(userID string) *AdminUserGroupsServic
 // List attempts to return the list of  groups the provided User is a member of
 func (gs *AdminUserGroupsService) List(ctx context.Context, mutators ...APIRequestMutator) (Groups, error) {
 	var (
-		resp   *http.Response
-		groups Groups
-		err    error
+		resp *http.Response
+		err  error
+
+		groups = make(Groups, 0)
 	)
 	resp, err = gs.c.callAdminRealms(ctx, http.MethodGet, path.Join(kcPathPartUsers, gs.userID, kcPathPartGroups), nil, mutators...)
-	groups = make(Groups, 0)
 	if err = handleResponse(resp, http.StatusOK, &groups, err); err != nil {
 		return nil, err
 	}
@@ -158,12 +158,12 @@ func (us *AdminUsersService) RoleMappingService(userID string) *AdminUserRoleMap
 
 func (rms *AdminUserRoleMappingsService) Get(ctx context.Context, mutators ...APIRequestMutator) (*RoleMapping, error) {
 	var (
-		resp        *http.Response
-		roleMapping *RoleMapping
-		err         error
+		resp *http.Response
+		err  error
+
+		roleMapping = new(RoleMapping)
 	)
 	resp, err = rms.c.callAdminRealms(ctx, http.MethodGet, path.Join(kcPathPartUsers, rms.userID, kcPathPartRoleMappings), nil, mutators...)
-	roleMapping = new(RoleMapping)
 	if err = handleResponse(resp, http.StatusOK, roleMapping, err); err != nil {
 		return nil, err
 	}
@@ -188,12 +188,12 @@ func (rms *AdminUserRoleMappingsService) RealmsService() *AdminUserRoleMappingRe
 
 func (rms *AdminUserRoleMappingRealmsService) List(ctx context.Context, mutators ...APIRequestMutator) (Roles, error) {
 	var (
-		resp  *http.Response
-		roles Roles
-		err   error
+		resp *http.Response
+		err  error
+
+		roles = make(Roles, 0)
 	)
 	resp, err = rms.c.callAdminRealms(ctx, http.MethodGet, path.Join(kcPathPartUsers, rms.userID, kcPathPartRoleMappings, kcPathPartRealm), nil, mutators...)
-	roles = make(Roles, 0)
 	if err = handleResponse(resp, http.StatusOK, &roles, err); err != nil {
 		return nil, err
 	}
@@ -202,9 +202,10 @@ func (rms *AdminUserRoleMappingRealmsService) List(ctx context.Context, mutators
 
 func (rms *AdminUserRoleMappingRealmsService) Available(ctx context.Context, mutators ...APIRequestMutator) (Roles, error) {
 	var (
-		resp  *http.Response
-		roles Roles
-		err   error
+		resp *http.Response
+		err  error
+
+		roles = make(Roles, 0)
 	)
 	resp, err = rms.c.callAdminRealms(
 		ctx,
@@ -212,7 +213,6 @@ func (rms *AdminUserRoleMappingRealmsService) Available(ctx context.Context, mut
 		path.Join(kcPathPartUsers, rms.userID, kcPathPartRoleMappings, kcPathPartRealm, kcPathPartAvailable),
 		nil,
 		mutators...)
-	roles = make(Roles, 0)
 	if err = handleResponse(resp, http.StatusOK, &roles, err); err != nil {
 		return nil, err
 	}

@@ -21,9 +21,10 @@ func (c *AdminAPIClient) GroupsService() *AdminGroupsService {
 // with
 func (gs *AdminGroupsService) List(ctx context.Context, search string, first, max int, mutators ...APIRequestMutator) (Groups, error) {
 	var (
-		resp   *http.Response
-		groups Groups
-		err    error
+		resp *http.Response
+		err  error
+
+		groups = make(Groups, 0)
 	)
 	resp, err = gs.c.callAdminRealms(
 		ctx,
@@ -36,10 +37,6 @@ func (gs *AdminGroupsService) List(ctx context.Context, search string, first, ma
 			QueryMutator("first", first, true),
 			NonZeroQueryMutator("max", max, 20, true),
 		)...)
-	if err != nil {
-		return nil, err
-	}
-	groups = make(Groups, 0)
 	if err = handleResponse(resp, http.StatusOK, &groups, err); err != nil {
 		return nil, err
 	}
@@ -76,12 +73,12 @@ func (gs *AdminGroupsService) Count(ctx context.Context, search string, top bool
 // Get attempts to retrieve details of a specific  group within the realm this client was created with
 func (gs *AdminGroupsService) Get(ctx context.Context, groupID string, mutators ...APIRequestMutator) (*Group, error) {
 	var (
-		resp  *http.Response
-		group *Group
-		err   error
+		resp *http.Response
+		err  error
+
+		group = new(Group)
 	)
 	resp, err = gs.c.callAdminRealms(ctx, http.MethodGet, path.Join(kcPathPartGroups, groupID), nil, mutators...)
-	group = new(Group)
 	if err = handleResponse(resp, http.StatusOK, group, err); err != nil {
 		return nil, err
 	}
@@ -92,12 +89,12 @@ func (gs *AdminGroupsService) Get(ctx context.Context, groupID string, mutators 
 // specified within the realm this client was created with
 func (gs *AdminGroupsService) Members(ctx context.Context, groupID string, mutators ...APIRequestMutator) (Users, error) {
 	var (
-		resp    *http.Response
-		members Users
-		err     error
+		resp *http.Response
+		err  error
+
+		members = make(Users, 0)
 	)
 	resp, err = gs.c.callAdminRealms(ctx, http.MethodGet, path.Join(kcPathPartGroups, groupID, kcPathPartMembers), nil, mutators...)
-	members = make(Users, 0)
 	if err = handleResponse(resp, http.StatusOK, &members, err); err != nil {
 		return nil, err
 	}

@@ -19,9 +19,10 @@ func (c *AdminAPIClient) RoleService() *AdminRoleService {
 
 func (rs *AdminRoleService) RealmRoles(ctx context.Context, first, max int, mutators ...APIRequestMutator) (Roles, error) {
 	var (
-		resp  *http.Response
-		roles Roles
-		err   error
+		resp *http.Response
+		err  error
+
+		roles = make(Roles, 0)
 	)
 	resp, err = rs.c.callAdminRealms(
 		ctx,
@@ -34,7 +35,6 @@ func (rs *AdminRoleService) RealmRoles(ctx context.Context, first, max int, muta
 			NonZeroQueryMutator("max", max, 20, true),
 		)...,
 	)
-	roles = make(Roles, 0)
 	if err = handleResponse(resp, http.StatusOK, &roles, err); err != nil {
 		return nil, err
 	}
@@ -43,9 +43,10 @@ func (rs *AdminRoleService) RealmRoles(ctx context.Context, first, max int, muta
 
 func (rs *AdminRoleService) ClientRoles(ctx context.Context, clientID string, first, max int, mutators ...APIRequestMutator) (Roles, error) {
 	var (
-		resp  *http.Response
-		roles Roles
-		err   error
+		resp *http.Response
+		err  error
+
+		roles = make(Roles, 0)
 	)
 	resp, err = rs.c.callAdminRealms(
 		ctx,
@@ -58,7 +59,6 @@ func (rs *AdminRoleService) ClientRoles(ctx context.Context, clientID string, fi
 			NonZeroQueryMutator("max", max, 20, true),
 		)...,
 	)
-	roles = make(Roles, 0)
 	if err = handleResponse(resp, http.StatusOK, &roles, err); err != nil {
 		return nil, err
 	}
@@ -119,9 +119,10 @@ func (rs *AdminRoleService) ClientRoleCreateAndGet(ctx context.Context, clientID
 
 func (rs *AdminRoleService) RealmRoleUsers(ctx context.Context, roleName string, first, max int, mutators ...APIRequestMutator) (Users, error) {
 	var (
-		resp  *http.Response
-		users Users
-		err   error
+		resp *http.Response
+		err  error
+
+		users = make(Users, 0)
 	)
 	resp, err = rs.c.callAdminRealms(
 		ctx,
@@ -134,7 +135,6 @@ func (rs *AdminRoleService) RealmRoleUsers(ctx context.Context, roleName string,
 			NonZeroQueryMutator("max", max, 20, true),
 		)...,
 	)
-	users = make(Users, 0)
 	if err = handleResponse(resp, http.StatusOK, &users, err); err != nil {
 		return nil, err
 	}
@@ -143,9 +143,10 @@ func (rs *AdminRoleService) RealmRoleUsers(ctx context.Context, roleName string,
 
 func (rs *AdminRoleService) ClientRoleUsers(ctx context.Context, clientID, roleName string, first, max int, mutators ...APIRequestMutator) (Users, error) {
 	var (
-		resp  *http.Response
-		users Users
-		err   error
+		resp *http.Response
+		err  error
+
+		users = make(Users, 0)
 	)
 	resp, err = rs.c.callAdminRealms(
 		ctx,
@@ -157,7 +158,6 @@ func (rs *AdminRoleService) ClientRoleUsers(ctx context.Context, clientID, roleN
 			QueryMutator("first", first, true),
 			NonZeroQueryMutator("max", max, 20, true),
 		)...)
-	users = make(Users, 0)
 	if err = handleResponse(resp, http.StatusOK, &users, err); err != nil {
 		return nil, err
 	}
@@ -167,11 +167,11 @@ func (rs *AdminRoleService) ClientRoleUsers(ctx context.Context, clientID, roleN
 func (rs *AdminRoleService) Get(ctx context.Context, roleID string, mutators ...APIRequestMutator) (*Role, error) {
 	var (
 		resp *http.Response
-		role *Role
 		err  error
+
+		role = new(Role)
 	)
 	resp, err = rs.c.callAdminRealms(ctx, http.MethodGet, path.Join(kcPathPartRolesByID, roleID), nil, mutators...)
-	role = new(Role)
 	if err = handleResponse(resp, http.StatusOK, role, err); err != nil {
 		return nil, err
 	}

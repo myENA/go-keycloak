@@ -9,6 +9,22 @@ import (
 	"github.com/dgrijalva/jwt-go"
 )
 
+const (
+	DecisionStrategyUnanimous   = "UNANIMOUS"
+	DecisionStrategyAffirmative = "AFFIRMATIVE"
+	DecisionStrategyPositive    = "POSITIVE"
+
+	PermissionTypeResource = "resource"
+	PermissionTypeRole     = "role"
+
+	PolicyTypeRole       = "role"
+	PolicyTypeJavascript = "js"
+	PolicyTypeTime       = "time"
+
+	LogicPositive = "POSITIVE"
+	LogicNegative = "NEGATIVE"
+)
+
 type KeyValueMap map[string]string
 type KeyValuesMap map[string][]string
 
@@ -626,23 +642,43 @@ type Realm struct {
 	WaitIncrementSeconds                int                          `json:"waitIncrementSeconds,omitempty"`
 }
 
-// TODO: Model this
-type PermissionConfig map[string]interface{}
-
 // Permission is returned by the "PermissionPath" overview call
 type Permission struct {
-	ID               string           `json:"id,omitempty"`
-	Name             string           `json:"name"`
-	Description      string           `json:"description,omitempty"`
-	Type             string           `json:"type"`
-	Logic            string           `json:"logic"`
-	DecisionStrategy string           `json:"decisionStrategy"`
-	Config           PermissionConfig `json:"config"`
+	ID               string   `json:"id,omitempty"`
+	Name             string   `json:"name"`
+	Description      string   `json:"description,omitempty"`
+	Type             string   `json:"type"`
+	Logic            string   `json:"logic"`
+	DecisionStrategy string   `json:"decisionStrategy"`
+	Resources        []string `json:"resources"`
+	ResourceType     string   `json:"resourceType"`
+	Policies         []string `json:"policies"`
+	Scopes           []string `json:"scopes"`
 }
 
 type Permissions []*Permission
 
-type PermissionMap map[string]*Permission
+type PermissionCreateUpdateRequest struct {
+	// ID - only used during update request
+	ID               string `json:"id,omitempty"`
+	Name             string `json:"name"`
+	Description      string `json:"description"`
+	Type             string `json:"type"`
+	Logic            string `json:"logic"`
+	DecisionStrategy string `json:"decisionStrategy"`
+	// Policies - list of policy id's
+	Policies []string `json:"policies"`
+
+	// Resources - list of resource ids
+	// 	- only used when type == "resource"
+	//	- mutually exclusive with "resourceType"
+	Resources []string `json:"resources,omitempty"`
+
+	// ResourceType - matches against the freeform "type" field on any resources within the parent client
+	//	- only used when type == "resource"
+	//	- mutually exclusive with "resources"
+	ResourceType *string `json:"resourceType,omitempty"`
+}
 
 type PermissionScope struct {
 	ID               string   `json:"id,omitempty"`

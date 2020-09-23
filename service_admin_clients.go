@@ -21,9 +21,10 @@ func (c *AdminAPIClient) ClientsService() *AdminClientsService {
 // List attempts to return a list of all  clients available in the Realm this client was created with
 func (cs *AdminClientsService) List(ctx context.Context, clientID string, viewableOnly bool, first, max int, mutators ...APIRequestMutator) (Clients, error) {
 	var (
-		resp    *http.Response
-		clients Clients
-		err     error
+		resp *http.Response
+		err  error
+
+		clients = make(Clients, 0)
 	)
 	resp, err = cs.c.callAdminRealms(
 		ctx,
@@ -37,7 +38,6 @@ func (cs *AdminClientsService) List(ctx context.Context, clientID string, viewab
 			QueryMutator("first", first, true),
 			NonZeroQueryMutator("max", max, 20, true),
 		)...)
-	clients = make(Clients, 0)
 	if err = handleResponse(resp, http.StatusOK, &clients, err); err != nil {
 		return nil, err
 	}
@@ -47,12 +47,12 @@ func (cs *AdminClientsService) List(ctx context.Context, clientID string, viewab
 // Get attempts to return details about a specific  Get in the Realm this client was created with
 func (cs *AdminClientsService) Get(ctx context.Context, clientID string, mutators ...APIRequestMutator) (*Client, error) {
 	var (
-		resp   *http.Response
-		client *Client
-		err    error
+		resp *http.Response
+		err  error
+
+		client = new(Client)
 	)
 	resp, err = cs.c.callAdminRealms(ctx, http.MethodGet, path.Join(kcPathPartClients, clientID), nil, mutators...)
-	client = new(Client)
 	if err = handleResponse(resp, http.StatusOK, client, err); err != nil {
 		return nil, err
 	}
@@ -111,8 +111,9 @@ func (c *AdminAPIClient) ClientAuthzService(clientID string) *AdminClientAuthzSe
 func (cas *AdminClientAuthzService) Overview(ctx context.Context, mutators ...APIRequestMutator) (*ResourceServerOverview, error) {
 	var (
 		resp *http.Response
-		rs   *ResourceServerOverview
 		err  error
+
+		rs = new(ResourceServerOverview)
 	)
 	resp, err = cas.c.callAdminRealms(
 		ctx,
@@ -121,7 +122,6 @@ func (cas *AdminClientAuthzService) Overview(ctx context.Context, mutators ...AP
 		nil,
 		mutators...,
 	)
-	rs = new(ResourceServerOverview)
 	if err = handleResponse(resp, http.StatusOK, rs, err); err != nil {
 		return nil, err
 	}
@@ -131,8 +131,9 @@ func (cas *AdminClientAuthzService) Overview(ctx context.Context, mutators ...AP
 func (cas *AdminClientAuthzService) Resources(ctx context.Context, deep bool, first, max int, mutators ...APIRequestMutator) (Resources, error) {
 	var (
 		resp *http.Response
-		res  Resources
 		err  error
+
+		res = make(Resources, 0)
 	)
 	resp, err = cas.c.callAdminRealms(
 		ctx,
@@ -146,7 +147,6 @@ func (cas *AdminClientAuthzService) Resources(ctx context.Context, deep bool, fi
 			NonZeroQueryMutator("max", max, 20, true),
 		)...,
 	)
-	res = make(Resources, 0)
 	if err = handleResponse(resp, http.StatusOK, &res, err); err != nil {
 		return nil, err
 	}
@@ -156,8 +156,9 @@ func (cas *AdminClientAuthzService) Resources(ctx context.Context, deep bool, fi
 func (cas *AdminClientAuthzService) Resource(ctx context.Context, resourceID string, mutators ...APIRequestMutator) (*Resource, error) {
 	var (
 		resp *http.Response
-		res  *Resource
 		err  error
+
+		res = new(Resource)
 	)
 	resp, err = cas.c.callAdminRealms(
 		ctx,
@@ -166,7 +167,6 @@ func (cas *AdminClientAuthzService) Resource(ctx context.Context, resourceID str
 		nil,
 		mutators...,
 	)
-	res = new(Resource)
 	if err = handleResponse(resp, http.StatusOK, res, err); err != nil {
 		return nil, err
 	}
@@ -175,9 +175,10 @@ func (cas *AdminClientAuthzService) Resource(ctx context.Context, resourceID str
 
 func (cas *AdminClientAuthzService) ResourceSearch(ctx context.Context, name string, mutators ...APIRequestMutator) (*Resource, error) {
 	var (
-		resp     *http.Response
-		resource *Resource
-		err      error
+		resp *http.Response
+		err  error
+
+		resource = new(Resource)
 	)
 	resp, err = cas.c.callAdminRealms(
 		ctx,
@@ -189,7 +190,6 @@ func (cas *AdminClientAuthzService) ResourceSearch(ctx context.Context, name str
 			QueryMutator("name", name, true),
 		)...,
 	)
-	resource = new(Resource)
 	if err = handleResponse(resp, http.StatusOK, resource, err); err != nil {
 		return nil, err
 	}
@@ -199,8 +199,9 @@ func (cas *AdminClientAuthzService) ResourceSearch(ctx context.Context, name str
 func (cas *AdminClientAuthzService) ResourceCreate(ctx context.Context, body *ResourceCreateUpdateRequest, mutators ...APIRequestMutator) (*AdminCreateResponse, error) {
 	var (
 		resp *http.Response
-		res  *AdminCreateResponse
 		err  error
+
+		res = new(AdminCreateResponse)
 	)
 	resp, err = cas.c.callAdminRealms(
 		ctx,
@@ -209,7 +210,6 @@ func (cas *AdminClientAuthzService) ResourceCreate(ctx context.Context, body *Re
 		body,
 		mutators...,
 	)
-	res = new(AdminCreateResponse)
 	if err = handleResponse(resp, http.StatusCreated, res, err); err != nil {
 		return nil, err
 	}
@@ -251,9 +251,10 @@ func (cas *AdminClientAuthzService) ResourceDelete(ctx context.Context, resource
 
 func (cas *AdminClientAuthzService) Scopes(ctx context.Context, deep bool, first, max int, name string, mutators ...APIRequestMutator) (Scopes, error) {
 	var (
-		resp   *http.Response
-		scopes Scopes
-		err    error
+		resp *http.Response
+		err  error
+
+		scopes = make(Scopes, 0)
 	)
 	resp, err = cas.c.callAdminRealms(
 		ctx,
@@ -268,7 +269,6 @@ func (cas *AdminClientAuthzService) Scopes(ctx context.Context, deep bool, first
 			NonZeroQueryMutator("name", name, nil, true),
 		)...,
 	)
-	scopes = make(Scopes, 0)
 	if err = handleResponse(resp, http.StatusOK, &scopes, err); err != nil {
 		return nil, err
 	}
@@ -277,9 +277,10 @@ func (cas *AdminClientAuthzService) Scopes(ctx context.Context, deep bool, first
 
 func (cas *AdminClientAuthzService) ScopeSearch(ctx context.Context, name string, mutators ...APIRequestMutator) (*Scope, error) {
 	var (
-		resp  *http.Response
-		scope *Scope
-		err   error
+		resp *http.Response
+		err  error
+
+		scope = new(Scope)
 	)
 	resp, err = cas.c.callAdminRealms(
 		ctx,
@@ -291,7 +292,6 @@ func (cas *AdminClientAuthzService) ScopeSearch(ctx context.Context, name string
 			QueryMutator("name", name, true),
 		)...,
 	)
-	scope = new(Scope)
 	if err = handleResponse(resp, http.StatusOK, scope, err); err != nil {
 		return nil, err
 	}
@@ -300,9 +300,10 @@ func (cas *AdminClientAuthzService) ScopeSearch(ctx context.Context, name string
 
 func (cas *AdminClientAuthzService) ScopeCreate(ctx context.Context, body *ScopeCreateUpdateRequest, mutators ...APIRequestMutator) (*Scope, error) {
 	var (
-		resp  *http.Response
-		scope *Scope
-		err   error
+		resp *http.Response
+		err  error
+
+		scope = new(Scope)
 	)
 	resp, err = cas.c.callAdminRealms(
 		ctx,
@@ -311,7 +312,6 @@ func (cas *AdminClientAuthzService) ScopeCreate(ctx context.Context, body *Scope
 		body,
 		mutators...,
 	)
-	scope = new(Scope)
 	if err = handleResponse(resp, http.StatusCreated, scope, err); err != nil {
 		return nil, err
 	}
@@ -342,9 +342,10 @@ func (cas *AdminClientAuthzService) ScopeDelete(ctx context.Context, scopeID str
 
 func (cas *AdminClientAuthzService) Policies(ctx context.Context, permission bool, first, max int, mutators ...APIRequestMutator) (Policies, error) {
 	var (
-		resp     *http.Response
-		policies Policies
-		err      error
+		resp *http.Response
+		err  error
+
+		policies = make(Policies, 0)
 	)
 	resp, err = cas.c.callAdminRealms(
 		ctx,
@@ -358,7 +359,6 @@ func (cas *AdminClientAuthzService) Policies(ctx context.Context, permission boo
 			NonZeroQueryMutator("max", max, 20, true),
 		)...,
 	)
-	policies = make(Policies, 0)
 	if err = handleResponse(resp, http.StatusOK, &policies, err); err != nil {
 		return nil, err
 	}
@@ -367,9 +367,10 @@ func (cas *AdminClientAuthzService) Policies(ctx context.Context, permission boo
 
 func (cas *AdminClientAuthzService) Policy(ctx context.Context, policyID string, mutators ...APIRequestMutator) (*Policy, error) {
 	var (
-		resp   *http.Response
-		policy *Policy
-		err    error
+		resp *http.Response
+		err  error
+
+		policy = new(Policy)
 	)
 	resp, err = cas.c.callAdminRealms(
 		ctx,
@@ -378,7 +379,6 @@ func (cas *AdminClientAuthzService) Policy(ctx context.Context, policyID string,
 		nil,
 		mutators...,
 	)
-	policy = new(Policy)
 	if err = handleResponse(resp, http.StatusOK, policy, err); err != nil {
 		return nil, err
 	}
@@ -387,9 +387,10 @@ func (cas *AdminClientAuthzService) Policy(ctx context.Context, policyID string,
 
 func (cas *AdminClientAuthzService) PolicyProviders(ctx context.Context, mutators ...APIRequestMutator) (PolicyProviders, error) {
 	var (
-		resp     *http.Response
-		policies PolicyProviders
-		err      error
+		resp *http.Response
+		err  error
+
+		policies = make(PolicyProviders, 0)
 	)
 	resp, err = cas.c.callAdminRealms(
 		ctx,
@@ -398,7 +399,6 @@ func (cas *AdminClientAuthzService) PolicyProviders(ctx context.Context, mutator
 		nil,
 		mutators...,
 	)
-	policies = make(PolicyProviders, 0)
 	if err = handleResponse(resp, http.StatusOK, &policies, err); err != nil {
 		return nil, err
 	}
@@ -407,9 +407,10 @@ func (cas *AdminClientAuthzService) PolicyProviders(ctx context.Context, mutator
 
 func (cas *AdminClientAuthzService) PolicyDependents(ctx context.Context, policyID string, mutators ...APIRequestMutator) (Policies, error) {
 	var (
-		resp     *http.Response
-		policies Policies
-		err      error
+		resp *http.Response
+		err  error
+
+		policies = make(Policies, 0)
 	)
 	resp, err = cas.c.callAdminRealms(
 		ctx,
@@ -418,7 +419,6 @@ func (cas *AdminClientAuthzService) PolicyDependents(ctx context.Context, policy
 		nil,
 		mutators...,
 	)
-	policies = make(Policies, 0)
 	if err = handleResponse(resp, http.StatusOK, &policies, err); err != nil {
 		return nil, err
 	}
@@ -427,9 +427,10 @@ func (cas *AdminClientAuthzService) PolicyDependents(ctx context.Context, policy
 
 func (cas *AdminClientAuthzService) PolicySearch(ctx context.Context, name string, mutators ...APIRequestMutator) (*Policy, error) {
 	var (
-		resp   *http.Response
-		policy *Policy
-		err    error
+		resp *http.Response
+		err  error
+
+		policy = new(Policy)
 	)
 	resp, err = cas.c.callAdminRealms(
 		ctx,
@@ -441,7 +442,6 @@ func (cas *AdminClientAuthzService) PolicySearch(ctx context.Context, name strin
 			QueryMutator("name", name, true),
 		)...,
 	)
-	policy = new(Policy)
 	if err = handleResponse(resp, http.StatusOK, policy, err); err != nil {
 		return nil, err
 	}
@@ -450,9 +450,10 @@ func (cas *AdminClientAuthzService) PolicySearch(ctx context.Context, name strin
 
 func (cas *AdminClientAuthzService) PolicyCreate(ctx context.Context, body *PolicyCreateUpdateRequest, mutators ...APIRequestMutator) (*Policy, error) {
 	var (
-		resp   *http.Response
-		policy *Policy
-		err    error
+		resp *http.Response
+		err  error
+
+		policy = new(Policy)
 	)
 	resp, err = cas.c.callAdminRealms(
 		ctx,
@@ -461,7 +462,6 @@ func (cas *AdminClientAuthzService) PolicyCreate(ctx context.Context, body *Poli
 		body,
 		mutators...,
 	)
-	policy = new(Policy)
 	if err = handleResponse(resp, http.StatusCreated, policy, err); err != nil {
 		return nil, err
 	}
@@ -492,9 +492,10 @@ func (cas *AdminClientAuthzService) PolicyDelete(ctx context.Context, policyID s
 
 func (cas *AdminClientAuthzService) Permissions(ctx context.Context, first, max int, mutators ...APIRequestMutator) (Permissions, error) {
 	var (
-		resp  *http.Response
-		perms Permissions
-		err   error
+		resp *http.Response
+		err  error
+
+		perms = make(Permissions, 0)
 	)
 	resp, err = cas.c.callAdminRealms(
 		ctx,
@@ -507,18 +508,81 @@ func (cas *AdminClientAuthzService) Permissions(ctx context.Context, first, max 
 			NonZeroQueryMutator("max", max, 20, true),
 		)...,
 	)
-	perms = make(Permissions, 0)
 	if err = handleResponse(resp, http.StatusOK, &perms, err); err != nil {
 		return nil, err
 	}
 	return perms, nil
 }
 
-func (cas *AdminClientAuthzService) PermissionPolicies(ctx context.Context, permissionID string, mutators ...APIRequestMutator) (Policies, error) {
+func (cas *AdminClientAuthzService) Permission(ctx context.Context, permissionID string, mutators ...APIRequestMutator) (*Permission, error) {
 	var (
-		resp     *http.Response
-		policies Policies
-		err      error
+		resp *http.Response
+		err  error
+
+		perm = new(Permission)
+	)
+	resp, err = cas.c.callAdminRealms(
+		ctx,
+		http.MethodGet,
+		path.Join(kcPathPartClients, cas.clientID, kcPathPartAuthz, kcPathPartResourceServer, kcPathPartPermission, kcPathPartScope, permissionID),
+		nil,
+		mutators...,
+	)
+	if err = handleResponse(resp, http.StatusOK, perm, err); err != nil {
+		return nil, err
+	}
+	return perm, err
+}
+
+func (cas *AdminClientAuthzService) PermissionCreate(ctx context.Context, body *PermissionCreateUpdateRequest, mutators ...APIRequestMutator) (*Permission, error) {
+	var (
+		finalSlug string
+		resp      *http.Response
+		perm      *Permission
+		err       error
+	)
+	if finalSlug, err = permissionModifyPath(body); err != nil {
+		return nil, err
+	}
+	resp, err = cas.c.callAdminRealms(
+		ctx,
+		http.MethodPost,
+		path.Join(kcPathPartClients, cas.clientID, kcPathPartAuthz, kcPathPartResourceServer, kcPathPartPermission, finalSlug),
+		body,
+		mutators...,
+	)
+	perm = new(Permission)
+	if err = handleResponse(resp, http.StatusCreated, perm, err); err != nil {
+		return nil, err
+	}
+	return perm, nil
+}
+
+func (cas *AdminClientAuthzService) PermissionUpdate(ctx context.Context, body *PermissionCreateUpdateRequest, mutators ...APIRequestMutator) error {
+	var (
+		finalSlug string
+		resp      *http.Response
+		err       error
+	)
+	if finalSlug, err = permissionModifyPath(body); err != nil {
+		return err
+	}
+	resp, err = cas.c.callAdminRealms(
+		ctx,
+		http.MethodPut,
+		path.Join(kcPathPartClients, cas.clientID, kcPathPartAuthz, kcPathPartResourceServer, kcPathPartPermission, finalSlug, body.ID),
+		body,
+		mutators...,
+	)
+	return handleResponse(resp, http.StatusCreated, nil, err)
+}
+
+func (cas *AdminClientAuthzService) PermissionAssociatedPolicies(ctx context.Context, permissionID string, mutators ...APIRequestMutator) (Policies, error) {
+	var (
+		resp *http.Response
+		err  error
+
+		policies = make(Policies, 0)
 	)
 	resp, err = cas.c.callAdminRealms(
 		ctx,
@@ -527,7 +591,6 @@ func (cas *AdminClientAuthzService) PermissionPolicies(ctx context.Context, perm
 		nil,
 		mutators...,
 	)
-	policies = make(Policies, 0)
 	if err = handleResponse(resp, http.StatusOK, &policies, err); err != nil {
 		return nil, err
 	}
@@ -536,9 +599,10 @@ func (cas *AdminClientAuthzService) PermissionPolicies(ctx context.Context, perm
 
 func (cas *AdminClientAuthzService) ResourceScopes(ctx context.Context, resource string, mutators ...APIRequestMutator) (Scopes, error) {
 	var (
-		resp   *http.Response
-		scopes Scopes
-		err    error
+		resp *http.Response
+		err  error
+
+		scopes = make(Scopes, 0)
 	)
 	resp, err = cas.c.callAdminRealms(
 		ctx,
@@ -547,7 +611,6 @@ func (cas *AdminClientAuthzService) ResourceScopes(ctx context.Context, resource
 		nil,
 		mutators...,
 	)
-	scopes = make(Scopes, 0)
 	if err = handleResponse(resp, http.StatusOK, &scopes, err); err != nil {
 		return nil, err
 	}
@@ -556,9 +619,10 @@ func (cas *AdminClientAuthzService) ResourceScopes(ctx context.Context, resource
 
 func (cas *AdminClientAuthzService) ResourceScope(ctx context.Context, resource, scopeID string, mutators ...APIRequestMutator) (*Scope, error) {
 	var (
-		resp  *http.Response
-		scope *Scope
-		err   error
+		resp *http.Response
+		err  error
+
+		scope = new(Scope)
 	)
 	resp, err = cas.c.callAdminRealms(
 		ctx,
@@ -567,7 +631,6 @@ func (cas *AdminClientAuthzService) ResourceScope(ctx context.Context, resource,
 		nil,
 		mutators...,
 	)
-	scope = new(Scope)
 	if err = handleResponse(resp, http.StatusOK, scope, err); err != nil {
 		return nil, err
 	}
@@ -576,9 +639,10 @@ func (cas *AdminClientAuthzService) ResourceScope(ctx context.Context, resource,
 
 func (cas *AdminClientAuthzService) ResourcePermissions(ctx context.Context, resource string, mutators ...APIRequestMutator) (Permissions, error) {
 	var (
-		resp  *http.Response
-		perms Permissions
-		err   error
+		resp *http.Response
+		err  error
+
+		perms = make(Permissions, 0)
 	)
 	resp, err = cas.c.callAdminRealms(
 		ctx,
@@ -587,7 +651,6 @@ func (cas *AdminClientAuthzService) ResourcePermissions(ctx context.Context, res
 		nil,
 		mutators...,
 	)
-	perms = make(Permissions, 0)
 	if err = handleResponse(resp, http.StatusOK, &perms, err); err != nil {
 		return nil, err
 	}
