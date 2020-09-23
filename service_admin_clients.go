@@ -153,7 +153,7 @@ func (cas *AdminClientAuthzService) Resources(ctx context.Context, deep bool, fi
 	return res, nil
 }
 
-func (cas *AdminClientAuthzService) Resource(ctx context.Context, resourceName string, mutators ...APIRequestMutator) (*Resource, error) {
+func (cas *AdminClientAuthzService) Resource(ctx context.Context, resourceID string, mutators ...APIRequestMutator) (*Resource, error) {
 	var (
 		resp *http.Response
 		res  *Resource
@@ -162,7 +162,7 @@ func (cas *AdminClientAuthzService) Resource(ctx context.Context, resourceName s
 	resp, err = cas.c.callAdminRealms(
 		ctx,
 		http.MethodGet,
-		path.Join(kcPathPartClients, cas.clientID, kcPathPartAuthz, kcPathPartResourceServer, kcPathPartResource),
+		path.Join(kcPathPartClients, cas.clientID, kcPathPartAuthz, kcPathPartResourceServer, kcPathPartResource, resourceID),
 		nil,
 		mutators...,
 	)
@@ -214,6 +214,17 @@ func (cas *AdminClientAuthzService) ResourceCreate(ctx context.Context, body *Re
 		return nil, err
 	}
 	return res, nil
+}
+
+func (cas *AdminClientAuthzService) ResourceCreateAndGet(ctx context.Context, body *ResourceCreateUpdateRequest, mutators ...APIRequestMutator) (*Resource, error) {
+	var (
+		resp *AdminCreateResponse
+		err  error
+	)
+	if resp, err = cas.ResourceCreate(ctx, body, mutators...); err != nil {
+		return nil, err
+	}
+	return cas.Resource(ctx, resp.ID, mutators...)
 }
 
 func (cas *AdminClientAuthzService) ResourceUpdate(ctx context.Context, body *ResourceCreateUpdateRequest, mutators ...APIRequestMutator) error {
