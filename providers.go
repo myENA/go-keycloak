@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"net/url"
 	"sync"
 	"time"
@@ -88,6 +89,17 @@ func NewBearerTokenAuthProvider(bearerToken string) *BearerTokenAuthProvider {
 	bt := new(BearerTokenAuthProvider)
 	bt.bearerToken = bearerToken
 	return bt
+}
+
+func NewBearerTokenAuthProviderFromRequest(request *http.Request) (*BearerTokenAuthProvider, error) {
+	var (
+		bt string
+		ok bool
+	)
+	if bt, ok = RequestBearerToken(request); ok {
+		return NewBearerTokenAuthProvider(bt), nil
+	}
+	return nil, errors.New("missing bearer token in request")
 }
 
 func (p BearerTokenAuthProvider) AuthMutators(_ context.Context, _ *APIClient) ([]APIRequestMutator, error) {
