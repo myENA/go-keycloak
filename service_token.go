@@ -12,10 +12,10 @@ import (
 )
 
 type TokenService struct {
-	c *APIClient
+	c *AuthenticatedAPIClient
 }
 
-func (c *APIClient) TokenService() *TokenService {
+func (c *AuthenticatedAPIClient) TokenService() *TokenService {
 	ps := new(TokenService)
 	ps.c = c
 	return ps
@@ -24,7 +24,7 @@ func (c *APIClient) TokenService() *TokenService {
 // ClientEntitlement will attempt to call the pre-uma2 entitlement endpoint to return a Requesting Party Token
 // containing details about what aspects of the provided clientID the token for this request has access to, if any.
 // DEPRECATED: use the newer token workflow for instances newer than 3.4
-func (ts *TokenService) ClientEntitlement(ctx context.Context, clientID string, claimsType jwt.Claims, mutators ...APIRequestMutator) (*jwt.Token, error) {
+func (ts *TokenService) ClientEntitlement(ctx context.Context, ap AuthProvider, clientID string, claimsType jwt.Claims, mutators ...APIRequestMutator) (*jwt.Token, error) {
 	var (
 		resp *http.Response
 		env  *RealmEnvironment
@@ -37,14 +37,14 @@ func (ts *TokenService) ClientEntitlement(ctx context.Context, clientID string, 
 	if env.SupportsUMA2() {
 		req := NewOpenIDConnectTokenRequest(GrantTypeUMA2Ticket)
 		req.Audience = clientID
-		return ts.RequestingPartyToken(ctx, req, claimsType, mutators...)
+		return ts.RequestingPartyToken(ctx, ap, req, claimsType, mutators...)
 	}
 
 	// otherwise, execute legacy entitlement api
 	rptResp := new(struct {
 		RPT string `json:"rpt"`
 	})
-	resp, err = ts.c.Call(ctx, true, http.MethodGet, ts.c.realmsURL(kcPathPartAuthz, kcPathPartEntitlement, clientID), nil, mutators...)
+	resp, err = ts.c.Call(ctx, ap, http.MethodGet, ts.c.realmsURL(kcPathPartAuthz, kcPathPartEntitlement, clientID), nil, mutators...)
 	if err = handleResponse(resp, http.StatusOK, rptResp, err); err != nil {
 		return nil, err
 	}
@@ -52,7 +52,7 @@ func (ts *TokenService) ClientEntitlement(ctx context.Context, clientID string, 
 }
 
 // PermissionEvaluation will return an array of permissions granted by the server
-func (ts *TokenService) PermissionEvaluation(ctx context.Context, req *OpenIDConnectTokenRequest, mutators ...APIRequestMutator) (EvaluatedPermissions, error) {
+func (ts *TokenService) PermissionEvaluation(ctx context.Context, ap AuthProvider, req *OpenIDConnectTokenRequest, mutators ...APIRequestMutator) (EvaluatedPermissions, error) {
 	var (
 		body  url.Values
 		resp  *http.Response
@@ -71,7 +71,7 @@ func (ts *TokenService) PermissionEvaluation(ctx context.Context, req *OpenIDCon
 	}
 	resp, err = ts.c.Call(
 		ctx,
-		true,
+		ap,
 		http.MethodPost,
 		env.TokenEndpoint(),
 		strings.NewReader(body.Encode()),
@@ -94,7 +94,7 @@ func (ts *TokenService) PermissionDecision(ctx context.Context, req *OpenIDConne
 		mode = UMA2ResponseModeDecision
 	)
 	req.ResponseMode = &mode
-	if res, err = ts.c.openIDConnectToken(ctx, true, req, mutators...); err != nil {
+	if res, err = ts.c.openIDConnectToken(ctx, req, mutators...); err != nil {
 		if IsAPIError(err) && err.(*APIError).ResponseCode != http.StatusForbidden {
 			return nil, err
 		}
@@ -114,7 +114,7 @@ func (ts *TokenService) OpenIDConnectToken(ctx context.Context, req *OpenIDConne
 		err   error
 	)
 	req.ResponseMode = nil
-	if res, err = ts.c.openIDConnectToken(ctx, true, req, mutators...); err != nil {
+	if res, err = ts.c.openIDConnectToken(ctx, req, mutators...); err != nil {
 		return nil, err
 	}
 	if token, ok = res.(*OpenIDConnectToken); !ok {
@@ -124,7 +124,7 @@ func (ts *TokenService) OpenIDConnectToken(ctx context.Context, req *OpenIDConne
 }
 
 // RequestingPartyToken will attempt to automatically decode and validate a RPT returned from an OIDC token request
-func (ts *TokenService) RequestingPartyToken(ctx context.Context, req *OpenIDConnectTokenRequest, claimsType jwt.Claims, mutators ...APIRequestMutator) (*jwt.Token, error) {
+func (ts *TokenService) RequestingPartyToken(ctx context.Context, ap AuthProvider, req *OpenIDConnectTokenRequest, claimsType jwt.Claims, mutators ...APIRequestMutator) (*jwt.Token, error) {
 	req.ResponseMode = nil
 	resp, err := ts.OpenIDConnectToken(ctx, req, mutators...)
 	if err != nil {
@@ -133,7 +133,7 @@ func (ts *TokenService) RequestingPartyToken(ctx context.Context, req *OpenIDCon
 	return ts.c.ParseToken(ctx, resp.AccessToken, claimsType)
 }
 
-func (ts *TokenService) IntrospectRequestingPartyToken(ctx context.Context, rawRPT string, mutators ...APIRequestMutator) (*TokenIntrospectionResults, error) {
+func (ts *TokenService) IntrospectRequestingPartyToken(ctx context.Context, ap AuthProvider, rawRPT string, mutators ...APIRequestMutator) (*TokenIntrospectionResults, error) {
 	var (
 		body    url.Values
 		resp    *http.Response
@@ -149,7 +149,7 @@ func (ts *TokenService) IntrospectRequestingPartyToken(ctx context.Context, rawR
 	body.Add(paramTypeToken, rawRPT)
 	resp, err = ts.c.Call(
 		ctx,
-		true,
+		ap,
 		http.MethodPost,
 		env.IntrospectionEndpoint(),
 		strings.NewReader(body.Encode()),

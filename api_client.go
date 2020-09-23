@@ -119,11 +119,6 @@ type APIClientConfig struct {
 	// This is called once during client initialization to determine which realm to scope queries against
 	RealmProvider RealmProvider
 
-	// AuthProvider [optional]
-	//
-	// This is only required if you wish to execute queries against endpoints that require authentication.
-	AuthProvider AuthProvider
-
 	// CacheBackend [optional]
 	//
 	// Optionally provide your own cache implementation.  This cache is used, by default, for realm environment and
@@ -164,8 +159,6 @@ type APIClient struct {
 	hc    *http.Client
 
 	realmName string
-
-	ap AuthProvider
 }
 
 // NewAPIClient will attempt to construct and return a APIClient to you
@@ -192,29 +185,39 @@ func NewAPIClient(config *APIClientConfig, mutators ...ConfigMutator) (*APIClien
 	cl.cache = cc.CacheBackend
 	cl.hc = cc.HTTPClient
 	cl.mr = buildRequestMutatorRunner(cc.Debug)
-	cl.ap = cc.AuthProvider
 
 	return cl, nil
 }
 
-// NewAPIClientWithProvider will construct a new APIClient using a combined provider, such as a
+func NewAuthenticatedAPIClient(config *APIClientConfig, ap AuthProvider, mutators ...ConfigMutator) (*AuthenticatedAPIClient, error) {
+	c, err := NewAPIClient(config, mutators...)
+	if err != nil {
+		return nil, err
+	}
+	return c.AuthenticatedClient(ap), nil
+}
+
+// NewAuthenticatedAPIClientWithProvider will construct a new APIClient using a combined provider, such as a
 // ConfidentialClientAuthProvider
-func NewAPIClientWithProvider(cp CombinedProvider, mutators ...ConfigMutator) (*APIClient, error) {
+func NewAuthenticatedAPIClientWithProvider(cp CombinedProvider, mutators ...ConfigMutator) (*AuthenticatedAPIClient, error) {
 	conf := DefaultAPIClientConfig()
 	conf.AuthServerURLProvider = cp
 	conf.RealmProvider = cp
-	conf.AuthProvider = cp
-	return NewAPIClient(conf, mutators...)
+	c, err := NewAPIClient(conf, mutators...)
+	if err != nil {
+		return nil, err
+	}
+	return c.AuthenticatedClient(cp), nil
 }
 
-// NewAPIClientWithInstallDocument will construct an APIClient from an InstallDocument
-func NewAPIClientWithInstallDocument(id *InstallDocument, mutators ...ConfigMutator) (*APIClient, error) {
+// NewAuthenticatedAPIClientWithInstallDocument will construct an APIClient from an InstallDocument
+func NewAuthenticatedAPIClientWithInstallDocument(id *InstallDocument, mutators ...ConfigMutator) (*AuthenticatedAPIClient, error) {
 	// todo: support ID's for things other than a confidential client
 	ctp, err := NewConfidentialClientAuthProvider(&ConfidentialClientAuthProviderConfig{InstallDocument: id})
 	if err != nil {
 		return nil, err
 	}
-	return NewAPIClientWithProvider(ctp, mutators...)
+	return NewAuthenticatedAPIClientWithProvider(ctp, mutators...)
 }
 
 // AuthServerURL will return the address of the issuer this client is targeting
@@ -234,16 +237,9 @@ func (c *APIClient) RealmEnvironment(ctx context.Context) (*RealmEnvironment, er
 	return GetRealmEnvironment(ctx, c)
 }
 
-func (c *APIClient) BearerTokenProvider() (AuthProvider, error) {
-	if c.ap == nil {
-		return nil, errors.New("no bearer token provider configured with client")
-	}
-	return c.ap, nil
-}
-
 // Admin returns a new AdminAPIClient for the provided realm (does not have to be the same as the auth'd realm)
-func (c *APIClient) Admin(realmName string) *AdminAPIClient {
-	return &AdminAPIClient{APIClient: c, realmName: realmName}
+func (c *APIClient) Admin(ap AuthProvider, realmName string) *AdminAPIClient {
+	return c.AuthenticatedClient(ap).Admin(realmName)
 }
 
 // realmsURL builds a request path under the /realms/{realm}/... path
@@ -251,8 +247,8 @@ func (c *APIClient) realmsURL(bits ...string) string {
 	return fmt.Sprintf(kcURLPathRealmsFormat, c.authServerURL, c.realmName, path.Join(bits...))
 }
 
-func (c *APIClient) callRealms(ctx context.Context, authenticated bool, method, requestPath string, body interface{}, mutators ...APIRequestMutator) (*http.Response, error) {
-	return c.Call(ctx, authenticated, method, c.realmsURL(requestPath), body, mutators...)
+func (c *APIClient) callRealms(ctx context.Context, ap AuthProvider, method, requestPath string, body interface{}, mutators ...APIRequestMutator) (*http.Response, error) {
+	return c.Call(ctx, ap, method, c.realmsURL(requestPath), body, mutators...)
 }
 
 func (c *APIClient) Do(ctx context.Context, req *APIRequest, mutators ...APIRequestMutator) (*http.Response, error) {
@@ -278,7 +274,7 @@ func (c *APIClient) Do(ctx context.Context, req *APIRequest, mutators ...APIRequ
 }
 
 // Call is a helper method that wraps the creation of an *APIRequest type and executes it.
-func (c *APIClient) Call(ctx context.Context, authenticated bool, method, requestURL string, body interface{}, mutators ...APIRequestMutator) (*http.Response, error) {
+func (c *APIClient) Call(ctx context.Context, ap AuthProvider, method, requestURL string, body interface{}, mutators ...APIRequestMutator) (*http.Response, error) {
 	var (
 		req *APIRequest
 		err error
@@ -289,15 +285,12 @@ func (c *APIClient) Call(ctx context.Context, authenticated bool, method, reques
 		mutators = make([]APIRequestMutator, 0)
 	}
 
-	if authenticated {
-		if c.ap == nil {
-			return nil, fmt.Errorf("cannot execute \"%s %s\" as it requires authentication but no bearer token provider was configured with client", method, requestURL)
-		}
+	if ap != nil {
 		var (
 			am  []APIRequestMutator
 			err error
 		)
-		if am, err = c.ap.AuthMutators(ctx, c); err != nil {
+		if am, err = ap.AuthMutators(ctx, c); err != nil {
 			return nil, err
 		}
 		mutators = requestMutators(mutators, am...)
@@ -319,7 +312,7 @@ func (c *APIClient) RealmIssuerConfiguration(ctx context.Context, mutators ...AP
 		ic   *RealmIssuerConfiguration
 		err  error
 	)
-	resp, err = c.Call(ctx, false, http.MethodGet, c.realmsURL(), nil, mutators...)
+	resp, err = c.Call(ctx, nil, http.MethodGet, c.realmsURL(), nil, mutators...)
 	ic = new(RealmIssuerConfiguration)
 	if err = handleResponse(resp, http.StatusOK, ic, err); err != nil {
 		return nil, err
@@ -334,7 +327,7 @@ func (c *APIClient) OpenIDConfiguration(ctx context.Context, mutators ...APIRequ
 		oidc *OpenIDConfiguration
 		err  error
 	)
-	resp, err = c.Call(ctx, false, http.MethodGet, c.realmsURL(kcPathOIDC), nil, mutators...)
+	resp, err = c.Call(ctx, nil, http.MethodGet, c.realmsURL(kcPathOIDC), nil, mutators...)
 	oidc = new(OpenIDConfiguration)
 	if err = handleResponse(resp, http.StatusOK, oidc, err); err != nil {
 		return nil, err
@@ -350,7 +343,7 @@ func (c *APIClient) UMA2Configuration(ctx context.Context, mutators ...APIReques
 		uma2 *UMA2Configuration
 		err  error
 	)
-	resp, err = c.Call(ctx, false, http.MethodGet, c.realmsURL(kcPathUMA2C), nil, mutators...)
+	resp, err = c.Call(ctx, nil, http.MethodGet, c.realmsURL(kcPathUMA2C), nil, mutators...)
 	uma2 = new(UMA2Configuration)
 	if err = handleResponse(resp, http.StatusOK, uma2, err); err != nil {
 		return nil, err
@@ -368,7 +361,7 @@ func (c *APIClient) JSONWebKeys(ctx context.Context, mutators ...APIRequestMutat
 	if env, err = c.RealmEnvironment(ctx); err != nil {
 		return nil, err
 	}
-	resp, err = c.Call(ctx, false, http.MethodGet, env.JSONWebKeysEndpoint(), nil, mutators...)
+	resp, err = c.Call(ctx, nil, http.MethodGet, env.JSONWebKeysEndpoint(), nil, mutators...)
 	jwks = new(JSONWebKeySet)
 	if err = handleResponse(resp, http.StatusOK, jwks, err); err != nil {
 		return nil, err
@@ -384,7 +377,7 @@ func (c *APIClient) Login(ctx context.Context, req *OpenIDConnectTokenRequest, m
 		err   error
 	)
 	req.ResponseMode = nil
-	if res, err = c.openIDConnectToken(ctx, false, req, mutators...); err != nil {
+	if res, err = c.openIDConnectToken(ctx, nil, req, mutators...); err != nil {
 		return nil, err
 	}
 	if token, ok = res.(*OpenIDConnectToken); !ok {
@@ -431,11 +424,7 @@ func (c *APIClient) keyFunc(ctx context.Context) jwt.Keyfunc {
 	}
 }
 
-func (c *APIClient) TokenProvider() AuthProvider {
-	return c.ap
-}
-
-func (c *APIClient) openIDConnectToken(ctx context.Context, authenticated bool, req *OpenIDConnectTokenRequest, mutators ...APIRequestMutator) (interface{}, error) {
+func (c *APIClient) openIDConnectToken(ctx context.Context, ap AuthProvider, req *OpenIDConnectTokenRequest, mutators ...APIRequestMutator) (interface{}, error) {
 	var (
 		body  url.Values
 		resp  *http.Response
@@ -451,7 +440,7 @@ func (c *APIClient) openIDConnectToken(ctx context.Context, authenticated bool, 
 	}
 	resp, err = c.Call(
 		ctx,
-		authenticated,
+		ap,
 		http.MethodPost,
 		env.TokenEndpoint(),
 		body,
@@ -476,13 +465,30 @@ func (c *APIClient) openIDConnectToken(ctx context.Context, authenticated bool, 
 	return model, nil
 }
 
+type AuthenticatedAPIClient struct {
+	*APIClient
+	ap AuthProvider
+}
+
+func (c *APIClient) AuthenticatedClient(ap AuthProvider) *AuthenticatedAPIClient {
+	return &AuthenticatedAPIClient{APIClient: c, ap: ap}
+}
+
+func (c *AuthenticatedAPIClient) Admin(realmName string) *AdminAPIClient {
+	return &AdminAPIClient{AuthenticatedAPIClient: c, realmName: realmName}
+}
+
+func (c *AuthenticatedAPIClient) openIDConnectToken(ctx context.Context, req *OpenIDConnectTokenRequest, mutators ...APIRequestMutator) (interface{}, error) {
+	return c.APIClient.openIDConnectToken(ctx, c.ap, req, mutators...)
+}
+
 // AdminAPIClient is a simple extension of the base APIClient, adding /admin api calls
 type AdminAPIClient struct {
-	*APIClient
+	*AuthenticatedAPIClient
 	realmName string
 }
 
-func NewAdminAPIClient(config *APIClientConfig, realmName string, mutators ...ConfigMutator) (*AdminAPIClient, error) {
+func NewAdminAPIClient(config *APIClientConfig, ap AuthProvider, realmName string, mutators ...ConfigMutator) (*AdminAPIClient, error) {
 	var (
 		c   *APIClient
 		err error
@@ -491,11 +497,11 @@ func NewAdminAPIClient(config *APIClientConfig, realmName string, mutators ...Co
 		return nil, err
 	}
 	c.realmName = realmName
-	return c.Admin(realmName), nil
+	return c.Admin(ap, realmName), nil
 }
 
 func NewAdminAPIClientWithProvider(cp CombinedProvider, realmName string, mutators ...ConfigMutator) (*AdminAPIClient, error) {
-	c, err := NewAPIClientWithProvider(cp, mutators...)
+	c, err := NewAuthenticatedAPIClientWithProvider(cp, mutators...)
 	if err != nil {
 		return nil, err
 	}
@@ -503,7 +509,7 @@ func NewAdminAPIClientWithProvider(cp CombinedProvider, realmName string, mutato
 }
 
 func NewAdminAPIClientWithInstallDocument(id *InstallDocument, realmName string, mutators ...ConfigMutator) (*AdminAPIClient, error) {
-	c, err := NewAPIClientWithInstallDocument(id, mutators...)
+	c, err := NewAuthenticatedAPIClientWithInstallDocument(id, mutators...)
 	if err != nil {
 		return nil, err
 	}
@@ -516,5 +522,5 @@ func (c *AdminAPIClient) adminRealmsURL(bits ...string) string {
 }
 
 func (c *AdminAPIClient) callAdminRealms(ctx context.Context, method, requestPath string, body interface{}, mutators ...APIRequestMutator) (*http.Response, error) {
-	return c.Call(ctx, true, method, c.adminRealmsURL(requestPath), body, mutators...)
+	return c.Call(ctx, c.ap, method, c.adminRealmsURL(requestPath), body, mutators...)
 }

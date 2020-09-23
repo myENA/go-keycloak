@@ -56,9 +56,6 @@ func CompileAPIClientConfig(provided *APIClientConfig, mutators ...ConfigMutator
 	if provided.RealmProvider != nil {
 		actual.RealmProvider = provided.RealmProvider
 	}
-	if provided.AuthProvider != nil {
-		actual.AuthProvider = provided.AuthProvider
-	}
 	if provided.CacheBackend != nil {
 		actual.CacheBackend = provided.CacheBackend
 	}
