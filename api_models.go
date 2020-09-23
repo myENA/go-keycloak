@@ -463,10 +463,10 @@ type ResourceCreateUpdateRequest struct {
 	// ID - only used during update request
 	ID string `json:"_id,omitempty"`
 
-	IconURI string   `json:"icon_uri"`
-	Name    string   `json:"name"`
-	Scopes  []*Scope `json:"scopes"`
-	Type    string   `json:"type"`
+	IconURI string         `json:"icon_uri"`
+	Name    string         `json:"name"`
+	Scopes  ResourceScopes `json:"scopes"`
+	Type    string         `json:"type"`
 
 	URI *string `json:"uri,omitempty"` // used by 3.4
 
