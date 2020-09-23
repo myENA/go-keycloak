@@ -217,24 +217,6 @@ func NewAPIClientWithInstallDocument(id *InstallDocument, mutators ...ConfigMuta
 	return NewAPIClientWithProvider(ctp, mutators...)
 }
 
-// NewAPIClientWithBearerToken will construct a new APIClient with a bearer token
-func NewAPIClientWithBearerToken(token string, mutators ...ConfigMutator) (*APIClient, error) {
-	claims := new(StandardClaims)
-	_, _, err := (new(jwt.Parser)).ParseUnverified(token, claims)
-	if err != nil {
-		return nil, err
-	}
-	split := strings.SplitN(claims.Issuer, "/realms/", 2)
-	if len(split) != 2 {
-		return nil, fmt.Errorf("unable to split token issuer %q into url : realm", claims.Issuer)
-	}
-	config := DefaultAPIClientConfig()
-	config.AuthServerURLProvider = NewAuthServerURLProvider(split[0])
-	config.RealmProvider = NewStaticRealmProvider(strings.Trim(split[1], "/"))
-	config.AuthProvider = NewBearerTokenAuthProvider(token)
-	return NewAPIClient(config, mutators...)
-}
-
 // AuthServerURL will return the address of the issuer this client is targeting
 func (c *APIClient) AuthServerURL() string {
 	return c.authServerURL
