@@ -577,6 +577,17 @@ func (cas *AdminClientAuthzService) PermissionUpdate(ctx context.Context, body *
 	return handleResponse(resp, http.StatusCreated, nil, err)
 }
 
+func (cas *AdminClientAuthzService) PermissionDelete(ctx context.Context, permissionID string, mutators ...APIRequestMutator) error {
+	resp, err := cas.c.callAdminRealms(
+		ctx,
+		http.MethodDelete,
+		path.Join(kcPathPartClients, cas.clientID, kcPathPartAuthz, kcPathPartResourceServer, kcPathPartPermission, permissionID),
+		nil,
+		mutators...,
+	)
+	return handleResponse(resp, http.StatusNoContent, nil, err)
+}
+
 func (cas *AdminClientAuthzService) PermissionAssociatedPolicies(ctx context.Context, permissionID string, mutators ...APIRequestMutator) (Policies, error) {
 	var (
 		resp *http.Response
