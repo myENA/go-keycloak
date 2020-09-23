@@ -238,6 +238,17 @@ func (cas *AdminClientAuthzService) ResourceUpdate(ctx context.Context, body *Re
 	return handleResponse(resp, http.StatusNoContent, nil, err)
 }
 
+func (cas *AdminClientAuthzService) ResourceDelete(ctx context.Context, resourceID string, mutators ...APIRequestMutator) error {
+	resp, err := cas.c.callAdminRealms(
+		ctx,
+		http.MethodDelete,
+		path.Join(kcPathPartClients, cas.clientID, kcPathPartAuthz, kcPathPartResourceServer, kcPathPartResource, resourceID),
+		nil,
+		mutators...,
+	)
+	return handleResponse(resp, http.StatusNoContent, nil, err)
+}
+
 func (cas *AdminClientAuthzService) Scopes(ctx context.Context, deep bool, first, max int, name string, mutators ...APIRequestMutator) (Scopes, error) {
 	var (
 		resp   *http.Response
