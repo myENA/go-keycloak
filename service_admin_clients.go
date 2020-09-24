@@ -2,7 +2,6 @@ package keycloak
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"path"
 )

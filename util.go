@@ -100,7 +100,7 @@ func handleResponse(httpResp *http.Response, successCode int, modelPtr interface
 	}
 
 	if httpResp.StatusCode != successCode {
-		return newAPIError(httpResp)
+		return newAPIError(successCode, httpResp)
 	}
 
 	if modelPtr != nil {

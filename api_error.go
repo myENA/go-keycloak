@@ -9,6 +9,8 @@ import (
 )
 
 type APIError struct {
+	SuccessCode int `json:"success_code"`
+
 	ResponseCode    int         `json:"response_code"`
 	ResponseStatus  string      `json:"response_status"`
 	ResponseHeaders http.Header `json:"response_headers"`
@@ -19,6 +21,7 @@ type APIError struct {
 
 func newAPIError(successCode int, resp *http.Response) *APIError {
 	e := new(APIError)
+	e.SuccessCode = successCode
 	e.ResponseCode = resp.StatusCode
 	e.ResponseStatus = resp.Status
 	e.ResponseHeaders = resp.Header
@@ -35,7 +38,7 @@ func (e *APIError) Error() string {
 	if e.ResponseCode == 0 {
 		return ""
 	}
-	return fmt.Sprintf("Call returned non-200: status=%q; error=%q; error_description=%q", e.ResponseStatus, e.Err, e.ErrDescription)
+	return fmt.Sprintf("Call returned non-%d: status=%q; error=%q; error_description=%q", e.SuccessCode, e.ResponseStatus, e.Err, e.ErrDescription)
 }
 
 func IsAPIError(err error) bool {
