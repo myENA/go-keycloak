@@ -150,3 +150,16 @@ func permissionModifyPath(body *PermissionCreateUpdateRequest) (string, error) {
 		return "", errors.New("field \"type\" must be provided in request body")
 	}
 }
+
+func policyModifyPath(body *PolicyCreateUpdateRequest) (string, error) {
+	switch body.Type {
+	case PolicyTypeJavascript:
+		return kcPathPartJS, nil
+	case PolicyTypeRole:
+		return kcPathPartRole, nil
+	case PolicyTypeTime:
+		return kcPathPartTime, nil
+	default:
+		return "", errors.New("field \"type\" must be provided in request body")
+	}
+}

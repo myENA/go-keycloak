@@ -72,6 +72,7 @@ const (
 	kcPathPartEntitlement        = "entitlement"
 	kcPathPartGroups             = "groups"
 	kcPathPartMembers            = "members"
+	kcPathPartJS                 = "js"
 	kcPathPartPermission         = "permission"
 	kcPathPartPermissions        = "permissions"
 	kcPathPartPolicy             = "policy"
@@ -86,6 +87,7 @@ const (
 	kcPathPartSearch             = "search"
 	kcPathPartScope              = "scope"
 	kcPathPartScopes             = "scopes"
+	kcPathPartTime               = "time"
 	kcPathPartUsers              = "users"
 )
 

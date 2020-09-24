@@ -509,15 +509,19 @@ func (cas *AdminClientAuthzService) PolicySearch(ctx context.Context, name strin
 
 func (cas *AdminClientAuthzService) PolicyCreate(ctx context.Context, body *PolicyCreateUpdateRequest, mutators ...APIRequestMutator) (*Policy, error) {
 	var (
-		resp *http.Response
-		err  error
+		finalSlug string
+		resp      *http.Response
+		err       error
 
 		policy = new(Policy)
 	)
+	if finalSlug, err = policyModifyPath(body); err != nil {
+		return nil, err
+	}
 	resp, err = cas.c.callAdminRealms(
 		ctx,
 		http.MethodPost,
-		path.Join(kcPathPartClients, cas.clientID, kcPathPartAuthz, kcPathPartResourceServer, kcPathPartPolicy),
+		path.Join(kcPathPartClients, cas.clientID, kcPathPartAuthz, kcPathPartResourceServer, kcPathPartPolicy, finalSlug),
 		body,
 		requestMutators(
 			mutators,
@@ -532,10 +536,18 @@ func (cas *AdminClientAuthzService) PolicyCreate(ctx context.Context, body *Poli
 }
 
 func (cas *AdminClientAuthzService) PolicyUpdate(ctx context.Context, body *PolicyCreateUpdateRequest, mutators ...APIRequestMutator) error {
-	resp, err := cas.c.callAdminRealms(
+	var (
+		finalSlug string
+		resp      *http.Response
+		err       error
+	)
+	if finalSlug, err = policyModifyPath(body); err != nil {
+		return err
+	}
+	resp, err = cas.c.callAdminRealms(
 		ctx,
 		http.MethodPut,
-		path.Join(kcPathPartClients, cas.clientID, kcPathPartAuthz, kcPathPartResourceServer, kcPathPartPolicy, body.ID),
+		path.Join(kcPathPartClients, cas.clientID, kcPathPartAuthz, kcPathPartResourceServer, kcPathPartPolicy, finalSlug, body.ID),
 		body,
 		requestMutators(
 			mutators,
