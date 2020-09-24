@@ -44,7 +44,14 @@ func (ts *TokenService) ClientEntitlement(ctx context.Context, ap AuthProvider, 
 	rptResp := new(struct {
 		RPT string `json:"rpt"`
 	})
-	resp, err = ts.c.Call(ctx, ap, http.MethodGet, ts.c.realmsURL(kcPathPartAuthz, kcPathPartEntitlement, clientID), nil, mutators...)
+	resp, err = ts.c.Call(
+		ctx,
+		ap,
+		http.MethodGet,
+		ts.c.realmsURL(kcPathPartAuthz, kcPathPartEntitlement, clientID),
+		nil,
+		HeaderMutator(httpHeaderAccept, httpHeaderValueJSON, true),
+	)
 	if err = handleResponse(resp, http.StatusOK, rptResp, err); err != nil {
 		return nil, err
 	}
@@ -75,7 +82,12 @@ func (ts *TokenService) PermissionEvaluation(ctx context.Context, ap AuthProvide
 		http.MethodPost,
 		env.TokenEndpoint(),
 		strings.NewReader(body.Encode()),
-		requestMutators(mutators, HeaderMutator(httpHeaderContentType, httpHeaderValueFormURLEncoded, true))...)
+		requestMutators(
+			mutators,
+			HeaderMutator(httpHeaderAccept, httpHeaderValueJSON, true),
+			HeaderMutator(httpHeaderContentType, httpHeaderValueFormURLEncoded, true),
+		)...,
+	)
 	perms = make(EvaluatedPermissions, 0)
 	if err = handleResponse(resp, http.StatusOK, &perms, err); err != nil {
 		return nil, err
@@ -153,7 +165,11 @@ func (ts *TokenService) IntrospectRequestingPartyToken(ctx context.Context, ap A
 		http.MethodPost,
 		env.IntrospectionEndpoint(),
 		strings.NewReader(body.Encode()),
-		requestMutators(mutators, HeaderMutator(httpHeaderContentType, httpHeaderValueFormURLEncoded, true))...,
+		requestMutators(
+			mutators,
+			HeaderMutator(httpHeaderAccept, httpHeaderValueJSON, true),
+			HeaderMutator(httpHeaderContentType, httpHeaderValueFormURLEncoded, true),
+		)...,
 	)
 	results = new(TokenIntrospectionResults)
 	if err = handleResponse(resp, http.StatusOK, results, err); err != nil {

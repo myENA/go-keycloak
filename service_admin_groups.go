@@ -33,10 +33,12 @@ func (gs *AdminGroupsService) List(ctx context.Context, search string, first, ma
 		nil,
 		requestMutators(
 			mutators,
+			HeaderMutator(httpHeaderAccept, httpHeaderValueJSON, true),
 			NonZeroQueryMutator("search", search, nil, true),
 			QueryMutator("first", first, true),
 			NonZeroQueryMutator("max", max, 20, true),
-		)...)
+		)...,
+	)
 	if err = handleResponse(resp, http.StatusOK, &groups, err); err != nil {
 		return nil, err
 	}
@@ -60,6 +62,7 @@ func (gs *AdminGroupsService) Count(ctx context.Context, search string, top bool
 		nil,
 		requestMutators(
 			mutators,
+			HeaderMutator(httpHeaderAccept, httpHeaderValueJSON, true),
 			NonZeroQueryMutator("search", search, nil, true),
 			NonZeroQueryMutator("top", strconv.FormatBool(top), nil, true),
 		)...)
@@ -78,7 +81,16 @@ func (gs *AdminGroupsService) Get(ctx context.Context, groupID string, mutators 
 
 		group = new(Group)
 	)
-	resp, err = gs.c.callAdminRealms(ctx, http.MethodGet, path.Join(kcPathPartGroups, groupID), nil, mutators...)
+	resp, err = gs.c.callAdminRealms(
+		ctx,
+		http.MethodGet,
+		path.Join(kcPathPartGroups, groupID),
+		nil,
+		requestMutators(
+			mutators,
+			HeaderMutator(httpHeaderAccept, httpHeaderValueJSON, true),
+		)...,
+	)
 	if err = handleResponse(resp, http.StatusOK, group, err); err != nil {
 		return nil, err
 	}
@@ -94,7 +106,16 @@ func (gs *AdminGroupsService) Members(ctx context.Context, groupID string, mutat
 
 		members = make(Users, 0)
 	)
-	resp, err = gs.c.callAdminRealms(ctx, http.MethodGet, path.Join(kcPathPartGroups, groupID, kcPathPartMembers), nil, mutators...)
+	resp, err = gs.c.callAdminRealms(
+		ctx,
+		http.MethodGet,
+		path.Join(kcPathPartGroups, groupID, kcPathPartMembers),
+		nil,
+		requestMutators(
+			mutators,
+			HeaderMutator(httpHeaderAccept, httpHeaderValueJSON, true),
+		)...,
+	)
 	if err = handleResponse(resp, http.StatusOK, &members, err); err != nil {
 		return nil, err
 	}
@@ -122,6 +143,16 @@ func (gs *AdminGroupsService) Delete(ctx context.Context, groupID string, mutato
 
 // Update attempts to push updated values for a specific group to
 func (gs *AdminGroupsService) Update(ctx context.Context, groupID string, group Group, mutators ...APIRequestMutator) error {
-	resp, err := gs.c.callAdminRealms(ctx, http.MethodPut, path.Join(kcPathPartGroups, groupID), group, mutators...)
+	resp, err := gs.c.callAdminRealms(
+		ctx,
+		http.MethodPut,
+		path.Join(kcPathPartGroups, groupID),
+		group,
+		requestMutators(
+			mutators,
+			HeaderMutator(httpHeaderAccept, httpHeaderValueJSON, true),
+			HeaderMutator(httpHeaderContentType, httpHeaderValueJSON, true),
+		)...,
+	)
 	return handleResponse(resp, http.StatusOK, nil, err)
 }

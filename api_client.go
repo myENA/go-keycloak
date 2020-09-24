@@ -281,7 +281,17 @@ func (c *APIClient) RealmIssuerConfiguration(ctx context.Context, mutators ...AP
 		ic   *RealmIssuerConfiguration
 		err  error
 	)
-	resp, err = c.Call(ctx, nil, http.MethodGet, c.realmsURL(), nil, mutators...)
+	resp, err = c.Call(
+		ctx,
+		nil,
+		http.MethodGet,
+		c.realmsURL(),
+		nil,
+		requestMutators(
+			mutators,
+			QueryMutator(httpHeaderAccept, httpHeaderValueJSON, true),
+		)...,
+	)
 	ic = new(RealmIssuerConfiguration)
 	if err = handleResponse(resp, http.StatusOK, ic, err); err != nil {
 		return nil, err
@@ -296,7 +306,17 @@ func (c *APIClient) OpenIDConfiguration(ctx context.Context, mutators ...APIRequ
 		oidc *OpenIDConfiguration
 		err  error
 	)
-	resp, err = c.Call(ctx, nil, http.MethodGet, c.realmsURL(kcPathOIDC), nil, mutators...)
+	resp, err = c.Call(
+		ctx,
+		nil,
+		http.MethodGet,
+		c.realmsURL(kcPathOIDC),
+		nil,
+		requestMutators(
+			mutators,
+			QueryMutator(httpHeaderAccept, httpHeaderValueJSON, true),
+		)...,
+	)
 	oidc = new(OpenIDConfiguration)
 	if err = handleResponse(resp, http.StatusOK, oidc, err); err != nil {
 		return nil, err
@@ -312,7 +332,17 @@ func (c *APIClient) UMA2Configuration(ctx context.Context, mutators ...APIReques
 		uma2 *UMA2Configuration
 		err  error
 	)
-	resp, err = c.Call(ctx, nil, http.MethodGet, c.realmsURL(kcPathUMA2C), nil, mutators...)
+	resp, err = c.Call(
+		ctx,
+		nil,
+		http.MethodGet,
+		c.realmsURL(kcPathUMA2C),
+		nil,
+		requestMutators(
+			mutators,
+			QueryMutator(httpHeaderAccept, httpHeaderValueJSON, true),
+		)...,
+	)
 	uma2 = new(UMA2Configuration)
 	if err = handleResponse(resp, http.StatusOK, uma2, err); err != nil {
 		return nil, err
@@ -330,7 +360,16 @@ func (c *APIClient) JSONWebKeys(ctx context.Context, mutators ...APIRequestMutat
 	if env, err = c.RealmEnvironment(ctx); err != nil {
 		return nil, err
 	}
-	resp, err = c.Call(ctx, nil, http.MethodGet, env.JSONWebKeysEndpoint(), nil, mutators...)
+	resp, err = c.Call(
+		ctx,
+		nil,
+		http.MethodGet,
+		env.JSONWebKeysEndpoint(),
+		nil, requestMutators(
+			mutators,
+			QueryMutator(httpHeaderAccept, httpHeaderValueJSON, true),
+		)...,
+	)
 	jwks = new(JSONWebKeySet)
 	if err = handleResponse(resp, http.StatusOK, jwks, err); err != nil {
 		return nil, err
@@ -346,7 +385,16 @@ func (c *APIClient) Login(ctx context.Context, req *OpenIDConnectTokenRequest, m
 		err   error
 	)
 	req.ResponseMode = nil
-	if res, err = c.openIDConnectToken(ctx, nil, req, mutators...); err != nil {
+	res, err = c.openIDConnectToken(
+		ctx,
+		nil,
+		req,
+		requestMutators(
+			mutators,
+			HeaderMutator(httpHeaderAccept, httpHeaderValueJSON, true),
+		)...,
+	)
+	if err != nil {
 		return nil, err
 	}
 	if token, ok = res.(*OpenIDConnectToken); !ok {
@@ -413,7 +461,11 @@ func (c *APIClient) openIDConnectToken(ctx context.Context, ap AuthProvider, req
 		http.MethodPost,
 		env.TokenEndpoint(),
 		body,
-		requestMutators(mutators, HeaderMutator(httpHeaderContentType, httpHeaderValueFormURLEncoded, true))...,
+		requestMutators(
+			mutators,
+			HeaderMutator(httpHeaderAccept, httpHeaderValueJSON, true),
+			HeaderMutator(httpHeaderContentType, httpHeaderValueFormURLEncoded, true),
+		)...,
 	)
 	if req.ResponseMode == nil {
 		model = new(OpenIDConnectToken)

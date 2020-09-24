@@ -31,6 +31,7 @@ func (us *AdminUsersService) List(ctx context.Context, email, firstName, lastNam
 		nil,
 		requestMutators(
 			mutators,
+			HeaderMutator(httpHeaderAccept, httpHeaderValueJSON, true),
 			NonZeroQueryMutator("email", email, nil, true),
 			NonZeroQueryMutator("firstName", firstName, nil, true),
 			NonZeroQueryMutator("lastName", lastName, nil, true),
@@ -65,7 +66,16 @@ func (us *AdminUsersService) Get(ctx context.Context, userID string, mutators ..
 
 		user = new(User)
 	)
-	resp, err = us.c.callAdminRealms(ctx, http.MethodGet, path.Join(kcPathPartUsers, userID), nil, mutators...)
+	resp, err = us.c.callAdminRealms(
+		ctx,
+		http.MethodGet,
+		path.Join(kcPathPartUsers, userID),
+		nil,
+		requestMutators(
+			mutators,
+			HeaderMutator(httpHeaderAccept, httpHeaderValueJSON, true),
+		)...,
+	)
 	if err = handleResponse(resp, http.StatusOK, user, err); err != nil {
 		return nil, err
 	}
@@ -78,7 +88,17 @@ func (us *AdminUsersService) Create(ctx context.Context, user *UserCreate, mutat
 		resp *http.Response
 		err  error
 	)
-	resp, err = us.c.callAdminRealms(ctx, http.MethodPost, kcPathPartUsers, user, mutators...)
+	resp, err = us.c.callAdminRealms(
+		ctx,
+		http.MethodPost,
+		kcPathPartUsers,
+		user,
+		requestMutators(
+			mutators,
+			HeaderMutator(httpHeaderAccept, httpHeaderValueJSON, true),
+			HeaderMutator(httpHeaderContentType, httpHeaderValueJSON, true),
+		)...,
+	)
 	if err = handleResponse(resp, http.StatusOK, nil, err); err != nil {
 		return nil, err
 	}
@@ -87,7 +107,17 @@ func (us *AdminUsersService) Create(ctx context.Context, user *UserCreate, mutat
 
 // Update attempts to push an updated user definition
 func (us *AdminUsersService) Update(ctx context.Context, userID string, user *User, mutators ...APIRequestMutator) error {
-	resp, err := us.c.callAdminRealms(ctx, http.MethodPut, path.Join(kcPathPartUsers, userID), user, mutators...)
+	resp, err := us.c.callAdminRealms(
+		ctx,
+		http.MethodPut,
+		path.Join(kcPathPartUsers, userID),
+		user,
+		requestMutators(
+			mutators,
+			HeaderMutator(httpHeaderAccept, httpHeaderValueJSON, true),
+			HeaderMutator(httpHeaderContentType, httpHeaderValueJSON, true),
+		)...,
+	)
 	return handleResponse(resp, http.StatusOK, nil, err)
 }
 
@@ -121,7 +151,16 @@ func (gs *AdminUserGroupsService) List(ctx context.Context, mutators ...APIReque
 
 		groups = make(Groups, 0)
 	)
-	resp, err = gs.c.callAdminRealms(ctx, http.MethodGet, path.Join(kcPathPartUsers, gs.userID, kcPathPartGroups), nil, mutators...)
+	resp, err = gs.c.callAdminRealms(
+		ctx,
+		http.MethodGet,
+		path.Join(kcPathPartUsers, gs.userID, kcPathPartGroups),
+		nil,
+		requestMutators(
+			mutators,
+			HeaderMutator(httpHeaderAccept, httpHeaderValueJSON, true),
+		)...,
+	)
 	if err = handleResponse(resp, http.StatusOK, &groups, err); err != nil {
 		return nil, err
 	}
@@ -163,7 +202,16 @@ func (rms *AdminUserRoleMappingsService) Get(ctx context.Context, mutators ...AP
 
 		roleMapping = new(RoleMapping)
 	)
-	resp, err = rms.c.callAdminRealms(ctx, http.MethodGet, path.Join(kcPathPartUsers, rms.userID, kcPathPartRoleMappings), nil, mutators...)
+	resp, err = rms.c.callAdminRealms(
+		ctx,
+		http.MethodGet,
+		path.Join(kcPathPartUsers, rms.userID, kcPathPartRoleMappings),
+		nil,
+		requestMutators(
+			mutators,
+			HeaderMutator(httpHeaderAccept, httpHeaderValueJSON, true),
+		)...,
+	)
 	if err = handleResponse(resp, http.StatusOK, roleMapping, err); err != nil {
 		return nil, err
 	}
@@ -193,7 +241,16 @@ func (rms *AdminUserRoleMappingRealmsService) List(ctx context.Context, mutators
 
 		roles = make(Roles, 0)
 	)
-	resp, err = rms.c.callAdminRealms(ctx, http.MethodGet, path.Join(kcPathPartUsers, rms.userID, kcPathPartRoleMappings, kcPathPartRealm), nil, mutators...)
+	resp, err = rms.c.callAdminRealms(
+		ctx,
+		http.MethodGet,
+		path.Join(kcPathPartUsers, rms.userID, kcPathPartRoleMappings, kcPathPartRealm),
+		nil,
+		requestMutators(
+			mutators,
+			HeaderMutator(httpHeaderAccept, httpHeaderValueJSON, true),
+		)...,
+	)
 	if err = handleResponse(resp, http.StatusOK, &roles, err); err != nil {
 		return nil, err
 	}
@@ -212,7 +269,11 @@ func (rms *AdminUserRoleMappingRealmsService) Available(ctx context.Context, mut
 		http.MethodGet,
 		path.Join(kcPathPartUsers, rms.userID, kcPathPartRoleMappings, kcPathPartRealm, kcPathPartAvailable),
 		nil,
-		mutators...)
+		requestMutators(
+			mutators,
+			HeaderMutator(httpHeaderAccept, httpHeaderValueJSON, true),
+		)...,
+	)
 	if err = handleResponse(resp, http.StatusOK, &roles, err); err != nil {
 		return nil, err
 	}

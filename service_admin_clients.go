@@ -33,6 +33,7 @@ func (cs *AdminClientsService) List(ctx context.Context, clientID string, viewab
 		nil,
 		requestMutators(
 			mutators,
+			HeaderMutator(httpHeaderAccept, httpHeaderValueJSON, true),
 			NonZeroQueryMutator("clientId", clientID, nil, true),
 			NonZeroQueryMutator("viewableOnly", viewableOnly, nil, true),
 			QueryMutator("first", first, true),
@@ -52,7 +53,16 @@ func (cs *AdminClientsService) Get(ctx context.Context, clientID string, mutator
 
 		client = new(Client)
 	)
-	resp, err = cs.c.callAdminRealms(ctx, http.MethodGet, path.Join(kcPathPartClients, clientID), nil, mutators...)
+	resp, err = cs.c.callAdminRealms(
+		ctx,
+		http.MethodGet,
+		path.Join(kcPathPartClients, clientID),
+		nil,
+		requestMutators(
+			mutators,
+			HeaderMutator(httpHeaderAccept, httpHeaderValueJSON, true),
+		)...,
+	)
 	if err = handleResponse(resp, http.StatusOK, client, err); err != nil {
 		return nil, err
 	}
@@ -65,7 +75,16 @@ func (cs *AdminClientsService) Create(ctx context.Context, body *ClientCreateReq
 		resp *http.Response
 		err  error
 	)
-	resp, err = cs.c.callAdminRealms(ctx, http.MethodPost, kcPathPartClients, body, mutators...)
+	resp, err = cs.c.callAdminRealms(
+		ctx,
+		http.MethodPost,
+		kcPathPartClients,
+		body,
+		requestMutators(
+			mutators,
+			HeaderMutator(httpHeaderAccept, httpHeaderValueJSON, true),
+		)...,
+	)
 	if err = handleResponse(resp, http.StatusOK, nil, err); err != nil {
 		return nil, err
 	}
@@ -87,7 +106,17 @@ func (cs *AdminClientsService) CreateAndGet(ctx context.Context, body *ClientCre
 }
 
 func (cs *AdminClientsService) Update(ctx context.Context, client *Client, mutators ...APIRequestMutator) error {
-	resp, err := cs.c.callAdminRealms(ctx, http.MethodPut, path.Join(kcPathPartClients, client.ID), client, mutators...)
+	resp, err := cs.c.callAdminRealms(
+		ctx,
+		http.MethodPut,
+		path.Join(kcPathPartClients, client.ID),
+		client,
+		requestMutators(
+			mutators,
+			HeaderMutator(httpHeaderAccept, httpHeaderValueJSON, true),
+			HeaderMutator(httpHeaderContentType, httpHeaderValueJSON, true),
+		)...,
+	)
 	return handleResponse(resp, http.StatusOK, nil, err)
 }
 
@@ -120,7 +149,10 @@ func (cas *AdminClientAuthzService) Overview(ctx context.Context, mutators ...AP
 		http.MethodGet,
 		path.Join(kcPathPartClients, cas.clientID, kcPathPartAuthz, kcPathPartResourceServer),
 		nil,
-		mutators...,
+		requestMutators(
+			mutators,
+			HeaderMutator(httpHeaderAccept, httpHeaderValueJSON, true),
+		)...,
 	)
 	if err = handleResponse(resp, http.StatusOK, rs, err); err != nil {
 		return nil, err
@@ -142,6 +174,7 @@ func (cas *AdminClientAuthzService) Resources(ctx context.Context, deep bool, fi
 		nil,
 		requestMutators(
 			mutators,
+			HeaderMutator(httpHeaderAccept, httpHeaderValueJSON, true),
 			QueryMutator("deep", deep, true),
 			QueryMutator("first", first, true),
 			NonZeroQueryMutator("max", max, 20, true),
@@ -165,8 +198,10 @@ func (cas *AdminClientAuthzService) Resource(ctx context.Context, resourceID str
 		http.MethodGet,
 		path.Join(kcPathPartClients, cas.clientID, kcPathPartAuthz, kcPathPartResourceServer, kcPathPartResource, resourceID),
 		nil,
-		mutators...,
-	)
+		requestMutators(
+			mutators,
+			HeaderMutator(httpHeaderAccept, httpHeaderValueJSON, true),
+		)...)
 	if err = handleResponse(resp, http.StatusOK, res, err); err != nil {
 		return nil, err
 	}
@@ -187,6 +222,7 @@ func (cas *AdminClientAuthzService) ResourceSearch(ctx context.Context, name str
 		nil,
 		requestMutators(
 			mutators,
+			HeaderMutator(httpHeaderAccept, httpHeaderValueJSON, true),
 			QueryMutator("name", name, true),
 		)...,
 	)
@@ -208,7 +244,11 @@ func (cas *AdminClientAuthzService) ResourceCreate(ctx context.Context, body *Re
 		http.MethodPost,
 		path.Join(kcPathPartClients, cas.clientID, kcPathPartAuthz, kcPathPartResourceServer, kcPathPartResource),
 		body,
-		mutators...,
+		requestMutators(
+			mutators,
+			HeaderMutator(httpHeaderAccept, httpHeaderValueJSON, true),
+			HeaderMutator(httpHeaderContentType, httpHeaderValueJSON, true),
+		)...,
 	)
 	if err = handleResponse(resp, http.StatusCreated, res, err); err != nil {
 		return nil, err
@@ -233,7 +273,10 @@ func (cas *AdminClientAuthzService) ResourceUpdate(ctx context.Context, body *Re
 		http.MethodPut,
 		path.Join(kcPathPartClients, cas.clientID, kcPathPartAuthz, kcPathPartResourceServer, kcPathPartResource, body.ID),
 		body,
-		mutators...,
+		requestMutators(
+			mutators,
+			HeaderMutator(httpHeaderContentType, httpHeaderValueJSON, true),
+		)...,
 	)
 	return handleResponse(resp, http.StatusNoContent, nil, err)
 }
@@ -263,6 +306,7 @@ func (cas *AdminClientAuthzService) Scopes(ctx context.Context, deep bool, first
 		nil,
 		requestMutators(
 			mutators,
+			HeaderMutator(httpHeaderAccept, httpHeaderValueJSON, true),
 			QueryMutator("deep", deep, true),
 			QueryMutator("first", first, true),
 			NonZeroQueryMutator("max", max, 20, true),
@@ -289,6 +333,7 @@ func (cas *AdminClientAuthzService) ScopeSearch(ctx context.Context, name string
 		nil,
 		requestMutators(
 			mutators,
+			HeaderMutator(httpHeaderAccept, httpHeaderValueJSON, true),
 			QueryMutator("name", name, true),
 		)...,
 	)
@@ -310,7 +355,11 @@ func (cas *AdminClientAuthzService) ScopeCreate(ctx context.Context, body *Scope
 		http.MethodPost,
 		path.Join(kcPathPartClients, cas.clientID, kcPathPartAuthz, kcPathPartResourceServer, kcPathPartScope),
 		body,
-		mutators...,
+		requestMutators(
+			mutators,
+			HeaderMutator(httpHeaderAccept, httpHeaderValueJSON, true),
+			HeaderMutator(httpHeaderContentType, httpHeaderValueJSON, true),
+		)...,
 	)
 	if err = handleResponse(resp, http.StatusCreated, scope, err); err != nil {
 		return nil, err
@@ -324,7 +373,10 @@ func (cas *AdminClientAuthzService) ScopeUpdate(ctx context.Context, body *Scope
 		http.MethodPut,
 		path.Join(kcPathPartClients, cas.clientID, kcPathPartAuthz, kcPathPartResourceServer, kcPathPartScope, body.ID),
 		body,
-		mutators...,
+		requestMutators(
+			mutators,
+			HeaderMutator(httpHeaderContentType, httpHeaderValueJSON, true),
+		)...,
 	)
 	return handleResponse(resp, http.StatusNoContent, nil, err)
 }
@@ -354,6 +406,7 @@ func (cas *AdminClientAuthzService) Policies(ctx context.Context, permission boo
 		nil,
 		requestMutators(
 			mutators,
+			HeaderMutator(httpHeaderAccept, httpHeaderValueJSON, true),
 			QueryMutator("permission", permission, true),
 			QueryMutator("first", first, true),
 			NonZeroQueryMutator("max", max, 20, true),
@@ -377,7 +430,10 @@ func (cas *AdminClientAuthzService) Policy(ctx context.Context, policyID string,
 		http.MethodGet,
 		path.Join(kcPathPartClients, cas.clientID, kcPathPartAuthz, kcPathPartResourceServer, kcPathPartPolicy, kcPathPartRole, policyID),
 		nil,
-		mutators...,
+		requestMutators(
+			mutators,
+			HeaderMutator(httpHeaderAccept, httpHeaderValueJSON, true),
+		)...,
 	)
 	if err = handleResponse(resp, http.StatusOK, policy, err); err != nil {
 		return nil, err
@@ -397,7 +453,10 @@ func (cas *AdminClientAuthzService) PolicyProviders(ctx context.Context, mutator
 		http.MethodGet,
 		path.Join(kcPathPartClients, cas.clientID, kcPathPartAuthz, kcPathPartResourceServer, kcPathPartPolicy, kcPathPartProviders),
 		nil,
-		mutators...,
+		requestMutators(
+			mutators,
+			HeaderMutator(httpHeaderAccept, httpHeaderValueJSON, true),
+		)...,
 	)
 	if err = handleResponse(resp, http.StatusOK, &policies, err); err != nil {
 		return nil, err
@@ -417,7 +476,10 @@ func (cas *AdminClientAuthzService) PolicyDependents(ctx context.Context, policy
 		http.MethodGet,
 		path.Join(kcPathPartClients, cas.clientID, kcPathPartAuthz, kcPathPartResourceServer, kcPathPartPolicy, policyID, kcPathPartDependentPolicies),
 		nil,
-		mutators...,
+		requestMutators(
+			mutators,
+			HeaderMutator(httpHeaderAccept, httpHeaderValueJSON, true),
+		)...,
 	)
 	if err = handleResponse(resp, http.StatusOK, &policies, err); err != nil {
 		return nil, err
@@ -439,6 +501,7 @@ func (cas *AdminClientAuthzService) PolicySearch(ctx context.Context, name strin
 		nil,
 		requestMutators(
 			mutators,
+			HeaderMutator(httpHeaderAccept, httpHeaderValueJSON, true),
 			QueryMutator("name", name, true),
 		)...,
 	)
@@ -460,7 +523,11 @@ func (cas *AdminClientAuthzService) PolicyCreate(ctx context.Context, body *Poli
 		http.MethodPost,
 		path.Join(kcPathPartClients, cas.clientID, kcPathPartAuthz, kcPathPartResourceServer, kcPathPartPolicy),
 		body,
-		mutators...,
+		requestMutators(
+			mutators,
+			HeaderMutator(httpHeaderAccept, httpHeaderValueJSON, true),
+			HeaderMutator(httpHeaderContentType, httpHeaderValueJSON, true),
+		)...,
 	)
 	if err = handleResponse(resp, http.StatusCreated, policy, err); err != nil {
 		return nil, err
@@ -474,7 +541,11 @@ func (cas *AdminClientAuthzService) PolicyUpdate(ctx context.Context, body *Poli
 		http.MethodPut,
 		path.Join(kcPathPartClients, cas.clientID, kcPathPartAuthz, kcPathPartResourceServer, kcPathPartPolicy, body.ID),
 		body,
-		mutators...,
+		requestMutators(
+			mutators,
+			HeaderMutator(httpHeaderAccept, httpHeaderValueJSON, true),
+			HeaderMutator(httpHeaderContentType, httpHeaderValueJSON, true),
+		)...,
 	)
 	return handleResponse(resp, http.StatusCreated, nil, err)
 }
@@ -504,6 +575,7 @@ func (cas *AdminClientAuthzService) Permissions(ctx context.Context, first, max 
 		nil,
 		requestMutators(
 			mutators,
+			HeaderMutator(httpHeaderAccept, httpHeaderValueJSON, true),
 			QueryMutator("first", first, true),
 			NonZeroQueryMutator("max", max, 20, true),
 		)...,
@@ -526,7 +598,10 @@ func (cas *AdminClientAuthzService) Permission(ctx context.Context, permissionID
 		http.MethodGet,
 		path.Join(kcPathPartClients, cas.clientID, kcPathPartAuthz, kcPathPartResourceServer, kcPathPartPermission, kcPathPartScope, permissionID),
 		nil,
-		mutators...,
+		requestMutators(
+			mutators,
+			HeaderMutator(httpHeaderAccept, httpHeaderValueJSON, true),
+		)...,
 	)
 	if err = handleResponse(resp, http.StatusOK, perm, err); err != nil {
 		return nil, err
@@ -549,8 +624,11 @@ func (cas *AdminClientAuthzService) PermissionCreate(ctx context.Context, body *
 		http.MethodPost,
 		path.Join(kcPathPartClients, cas.clientID, kcPathPartAuthz, kcPathPartResourceServer, kcPathPartPermission, finalSlug),
 		body,
-		mutators...,
-	)
+		requestMutators(
+			mutators,
+			HeaderMutator(httpHeaderAccept, httpHeaderValueJSON, true),
+			HeaderMutator(httpHeaderContentType, httpHeaderValueJSON, true),
+		)...)
 	perm = new(Permission)
 	if err = handleResponse(resp, http.StatusCreated, perm, err); err != nil {
 		return nil, err
@@ -600,7 +678,10 @@ func (cas *AdminClientAuthzService) PermissionAssociatedPolicies(ctx context.Con
 		http.MethodGet,
 		path.Join(kcPathPartClients, cas.clientID, kcPathPartAuthz, kcPathPartResourceServer, kcPathPartPolicy, permissionID, kcPathPartAssociatedPolicies),
 		nil,
-		mutators...,
+		requestMutators(
+			mutators,
+			HeaderMutator(httpHeaderAccept, httpHeaderValueJSON, true),
+		)...,
 	)
 	if err = handleResponse(resp, http.StatusOK, &policies, err); err != nil {
 		return nil, err
@@ -620,7 +701,10 @@ func (cas *AdminClientAuthzService) ResourceScopes(ctx context.Context, resource
 		http.MethodGet,
 		path.Join(kcPathPartClients, cas.clientID, kcPathPartAuthz, kcPathPartResourceServer, kcPathPartResource, resource, kcPathPartScopes),
 		nil,
-		mutators...,
+		requestMutators(
+			mutators,
+			HeaderMutator(httpHeaderAccept, httpHeaderValueJSON, true),
+		)...,
 	)
 	if err = handleResponse(resp, http.StatusOK, &scopes, err); err != nil {
 		return nil, err
@@ -640,7 +724,10 @@ func (cas *AdminClientAuthzService) ResourceScope(ctx context.Context, resource,
 		http.MethodGet,
 		path.Join(kcPathPartClients, cas.clientID, kcPathPartAuthz, kcPathPartResourceServer, kcPathPartResource, resource, kcPathPartScope, scopeID),
 		nil,
-		mutators...,
+		requestMutators(
+			mutators,
+			HeaderMutator(httpHeaderAccept, httpHeaderValueJSON, true),
+		)...,
 	)
 	if err = handleResponse(resp, http.StatusOK, scope, err); err != nil {
 		return nil, err
@@ -660,7 +747,10 @@ func (cas *AdminClientAuthzService) ResourcePermissions(ctx context.Context, res
 		http.MethodGet,
 		path.Join(kcPathPartClients, cas.clientID, kcPathPartAuthz, kcPathPartResourceServer, kcPathPartResource, resource, kcPathPartPermissions),
 		nil,
-		mutators...,
+		requestMutators(
+			mutators,
+			HeaderMutator(httpHeaderAccept, httpHeaderValueJSON, true),
+		)...,
 	)
 	if err = handleResponse(resp, http.StatusOK, &perms, err); err != nil {
 		return nil, err

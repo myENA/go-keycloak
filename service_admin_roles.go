@@ -31,6 +31,7 @@ func (rs *AdminRoleService) RealmRoles(ctx context.Context, first, max int, muta
 		nil,
 		requestMutators(
 			mutators,
+			HeaderMutator(httpHeaderAccept, httpHeaderValueJSON, true),
 			QueryMutator("first", first, true),
 			NonZeroQueryMutator("max", max, 20, true),
 		)...,
@@ -55,6 +56,7 @@ func (rs *AdminRoleService) ClientRoles(ctx context.Context, clientID string, fi
 		nil,
 		requestMutators(
 			mutators,
+			HeaderMutator(httpHeaderAccept, httpHeaderValueJSON, true),
 			QueryMutator("first", first, true),
 			NonZeroQueryMutator("max", max, 20, true),
 		)...,
@@ -70,7 +72,17 @@ func (rs *AdminRoleService) RealmRoleCreate(ctx context.Context, body *RoleCreat
 		resp *http.Response
 		err  error
 	)
-	resp, err = rs.c.callAdminRealms(ctx, http.MethodPost, kcPathPartRoles, body, mutators...)
+	resp, err = rs.c.callAdminRealms(
+		ctx,
+		http.MethodPost,
+		kcPathPartRoles,
+		body,
+		requestMutators(
+			mutators,
+			HeaderMutator(httpHeaderAccept, httpHeaderValueJSON, true),
+			HeaderMutator(httpHeaderContentType, httpHeaderValueJSON, true),
+		)...,
+	)
 	if err = handleResponse(resp, http.StatusCreated, nil, err); err != nil {
 		return nil, err
 	}
@@ -96,7 +108,17 @@ func (rs *AdminRoleService) ClientRoleCreate(ctx context.Context, clientID strin
 		resp *http.Response
 		err  error
 	)
-	resp, err = rs.c.callAdminRealms(ctx, http.MethodPost, path.Join(kcPathPartClients, clientID, kcPathPartRoles), body, mutators...)
+	resp, err = rs.c.callAdminRealms(
+		ctx,
+		http.MethodPost,
+		path.Join(kcPathPartClients, clientID, kcPathPartRoles),
+		body,
+		requestMutators(
+			mutators,
+			HeaderMutator(httpHeaderAccept, httpHeaderValueJSON, true),
+			HeaderMutator(httpHeaderContentType, httpHeaderValueJSON, true),
+		)...,
+	)
 	if err = handleResponse(resp, http.StatusCreated, nil, err); err != nil {
 		return nil, err
 	}
@@ -131,6 +153,7 @@ func (rs *AdminRoleService) RealmRoleUsers(ctx context.Context, roleName string,
 		nil,
 		requestMutators(
 			mutators,
+			HeaderMutator(httpHeaderAccept, httpHeaderValueJSON, true),
 			QueryMutator("first", first, true),
 			NonZeroQueryMutator("max", max, 20, true),
 		)...,
@@ -155,6 +178,7 @@ func (rs *AdminRoleService) ClientRoleUsers(ctx context.Context, clientID, roleN
 		nil,
 		requestMutators(
 			mutators,
+			HeaderMutator(httpHeaderAccept, httpHeaderValueJSON, true),
 			QueryMutator("first", first, true),
 			NonZeroQueryMutator("max", max, 20, true),
 		)...)
@@ -171,7 +195,16 @@ func (rs *AdminRoleService) Get(ctx context.Context, roleID string, mutators ...
 
 		role = new(Role)
 	)
-	resp, err = rs.c.callAdminRealms(ctx, http.MethodGet, path.Join(kcPathPartRolesByID, roleID), nil, mutators...)
+	resp, err = rs.c.callAdminRealms(
+		ctx,
+		http.MethodGet,
+		path.Join(kcPathPartRolesByID, roleID),
+		nil,
+		requestMutators(
+			mutators,
+			HeaderMutator(httpHeaderAccept, httpHeaderValueJSON, true),
+		)...,
+	)
 	if err = handleResponse(resp, http.StatusOK, role, err); err != nil {
 		return nil, err
 	}
@@ -180,7 +213,16 @@ func (rs *AdminRoleService) Get(ctx context.Context, roleID string, mutators ...
 
 // Update requires that ID be populated in body parameter
 func (rs *AdminRoleService) Update(ctx context.Context, body *Role, mutators ...APIRequestMutator) error {
-	resp, err := rs.c.callAdminRealms(ctx, http.MethodPut, path.Join(kcPathPartRolesByID, body.ID), body, mutators...)
+	resp, err := rs.c.callAdminRealms(
+		ctx,
+		http.MethodPut,
+		path.Join(kcPathPartRolesByID, body.ID),
+		body,
+		requestMutators(
+			mutators,
+			HeaderMutator(httpHeaderContentType, httpHeaderValueJSON, true),
+		)...,
+	)
 	return handleResponse(resp, http.StatusNoContent, nil, err)
 }
 
