@@ -10,7 +10,6 @@ type AdminClientsService struct {
 	c *AdminAPIClient
 }
 
-// RealmRoles returns a new admin clients service instance
 func (c *AdminAPIClient) ClientsService() *AdminClientsService {
 	cs := new(AdminClientsService)
 	cs.c = c
