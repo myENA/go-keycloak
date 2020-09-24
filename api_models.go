@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"strconv"
 	"time"
-
-	"github.com/dgrijalva/jwt-go"
 )
 
 const (
@@ -891,73 +889,6 @@ type Scopes []*Scope
 func (list Scopes) Len() int           { return len(list) }
 func (list Scopes) Less(i, j int) bool { return list[i].Name < list[j].Name }
 func (list Scopes) Swap(i, j int)      { list[i], list[j] = list[j], list[i] }
-
-type StringOrSlice []string
-
-func (s *StringOrSlice) UnmarshalJSON(data []byte) error {
-	var first byte
-	if len(data) > 1 {
-		first = data[0]
-	}
-
-	if first == '[' {
-		var parsed []string
-		if err := json.Unmarshal(data, &parsed); err != nil {
-			return err
-		}
-		*s = parsed
-		return nil
-	}
-
-	var single interface{}
-	if err := json.Unmarshal(data, &single); err != nil {
-		return err
-	}
-	if single == nil {
-		return nil
-	}
-	if str, ok := single.(string); ok {
-		*s = []string{str}
-		return nil
-	}
-
-	return fmt.Errorf("only string or array is allowed, not %T", single)
-}
-
-func (s StringOrSlice) MarshalJSON() ([]byte, error) {
-	switch len(s) {
-	case 0:
-		return nil, nil
-	case 1:
-		return json.Marshal([]string(s)[0])
-	default:
-		return json.Marshal([]string(s))
-	}
-}
-
-type StandardClaims struct {
-	jwt.StandardClaims
-	Audience StringOrSlice `json:"aud,omitempty"` // overloaded to support multiple audience tokens
-}
-
-func (c *StandardClaims) VerifyAudience(cmp string, required bool) bool {
-	return verifyAudience(c.Audience, cmp, required)
-}
-
-type MapClaims jwt.MapClaims
-
-func (m MapClaims) VerifyAudience(cmp string, req bool) bool {
-	if v, ok := m["aud"]; ok {
-		if aud, ok := v.(string); ok {
-			return verifyAudience([]string{aud}, cmp, req)
-		} else if auds, ok := v.([]string); ok {
-			return verifyAudience(auds, cmp, req)
-		} else if auds, ok := v.(StringOrSlice); ok {
-			return verifyAudience(auds, cmp, req)
-		}
-	}
-	return false
-}
 
 type JSONWebKey struct {
 	KeyID                string   `json:"kid"`

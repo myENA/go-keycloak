@@ -7,7 +7,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/dgrijalva/jwt-go"
+	"github.com/dgrijalva/jwt-go/v4"
 	"github.com/google/go-querystring/query"
 )
 

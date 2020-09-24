@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/dgrijalva/jwt-go"
+	"github.com/dgrijalva/jwt-go/v4"
 )
 
 // TokenParser represents any type that can handle parsing and persisting a range of certificate types

@@ -9,7 +9,7 @@ import (
 	"path"
 	"strings"
 
-	"github.com/dgrijalva/jwt-go"
+	"github.com/dgrijalva/jwt-go/v4"
 	"github.com/google/go-querystring/query"
 	"github.com/hashicorp/go-cleanhttp"
 )
@@ -403,7 +403,7 @@ func (c *APIClient) ParseToken(ctx context.Context, rawToken string, claimsType 
 		err      error
 	)
 	if claimsType == nil {
-		claimsType = new(StandardClaims)
+		claimsType = new(jwt.StandardClaims)
 	}
 	if jwtToken, err = jwt.ParseWithClaims(rawToken, claimsType, c.keyFunc(ctx)); err != nil {
 		return nil, fmt.Errorf("error parsing raw token into %T: %w", claimsType, err)
