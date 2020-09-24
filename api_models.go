@@ -427,10 +427,12 @@ type EventsResponse struct {
 }
 
 type ResourceScope struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	DisplayName string `json:"displayName,omitempty"`
-	IconURI     string `json:"iconUri,omitempty"`
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	IconURI string `json:"iconUri,omitempty"`
+
+	// todo: breaks 3.4
+	// DisplayName string `json:"displayName,omitempty"`
 }
 
 type ResourceScopes []ResourceScope
@@ -486,9 +488,10 @@ type ResourceCreateUpdateRequest struct {
 
 	URI *string `json:"uri,omitempty"` // used by 3.4
 
-	DisplayName *string      `json:"displayName,omitempty"` // used by 4.0+
-	URIs        []string     `json:"uris,omitempty"`        // used by 4.0+
-	Attributes  KeyValuesMap `json:"attributes,omitempty"`  // used by 4.0+
+	// todo: breaks 3.4
+	//DisplayName *string      `json:"displayName,omitempty"` // used by 4.0+
+	//URIs        []string     `json:"uris,omitempty"`        // used by 4.0+
+	//Attributes  KeyValuesMap `json:"attributes,omitempty"`  // used by 4.0+
 }
 
 type ResourceServerOverview struct {
@@ -882,7 +885,8 @@ type ScopeCreateUpdateRequest struct {
 	Name    string `json:"name"`
 	IconURI string `json:"iconUri"`
 
-	DisplayName string `json:"displayName,omitempty"` // used by 4.0+
+	// todo: breaks 3.4
+	//DisplayName string `json:"displayName,omitempty"` // used by 4.0+
 }
 
 type Scopes []*Scope
