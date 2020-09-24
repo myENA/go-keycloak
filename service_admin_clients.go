@@ -70,10 +70,12 @@ func (cs *AdminClientsService) Get(ctx context.Context, clientID string, mutator
 }
 
 // Create attempts to create a new client within
-func (cs *AdminClientsService) Create(ctx context.Context, body *ClientCreateRequest, mutators ...APIRequestMutator) ([]string, error) {
+func (cs *AdminClientsService) Create(ctx context.Context, body *ClientCreateRequest, mutators ...APIRequestMutator) (*Client, error) {
 	var (
 		resp *http.Response
 		err  error
+
+		client = new(Client)
 	)
 	resp, err = cs.c.callAdminRealms(
 		ctx,
@@ -85,24 +87,21 @@ func (cs *AdminClientsService) Create(ctx context.Context, body *ClientCreateReq
 			HeaderMutator(httpHeaderAccept, httpHeaderValueJSON, true),
 		)...,
 	)
-	if err = handleResponse(resp, http.StatusOK, nil, err); err != nil {
+	if err = handleResponse(resp, http.StatusCreated, nil, err); err != nil {
 		return nil, err
 	}
-	return parseResponseLocations(resp)
+	return client, nil
 }
 
 func (cs *AdminClientsService) CreateAndGet(ctx context.Context, body *ClientCreateRequest, mutators ...APIRequestMutator) (*Client, error) {
 	var (
-		ids []string
-		err error
+		client *Client
+		err    error
 	)
-	if ids, err = cs.Create(ctx, body, mutators...); err != nil {
+	if client, err = cs.Create(ctx, body, mutators...); err != nil {
 		return nil, err
 	}
-	if len(ids) != 1 {
-		return nil, fmt.Errorf("expected 1 id, found: %v", ids)
-	}
-	return cs.Get(ctx, ids[0], mutators...)
+	return cs.Get(ctx, client.ID, mutators...)
 }
 
 func (cs *AdminClientsService) Update(ctx context.Context, client *Client, mutators ...APIRequestMutator) error {
@@ -113,11 +112,10 @@ func (cs *AdminClientsService) Update(ctx context.Context, client *Client, mutat
 		client,
 		requestMutators(
 			mutators,
-			HeaderMutator(httpHeaderAccept, httpHeaderValueJSON, true),
 			HeaderMutator(httpHeaderContentType, httpHeaderValueJSON, true),
 		)...,
 	)
-	return handleResponse(resp, http.StatusOK, nil, err)
+	return handleResponse(resp, http.StatusNoContent, nil, err)
 }
 
 func (cs *AdminClientsService) Delete(ctx context.Context, clientID string, mutators ...APIRequestMutator) error {

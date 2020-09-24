@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/ioutil"
 	"net/http"
 )
 
@@ -16,12 +17,17 @@ type APIError struct {
 	ErrDescription string `json:"error_description"`
 }
 
-func newAPIError(resp *http.Response) *APIError {
+func newAPIError(successCode int, resp *http.Response) *APIError {
 	e := new(APIError)
 	e.ResponseCode = resp.StatusCode
 	e.ResponseStatus = resp.Status
 	e.ResponseHeaders = resp.Header
-	_ = json.NewDecoder(resp.Body).Decode(e)
+	b, _ := ioutil.ReadAll(resp.Body)
+	if len(b) > 0 {
+		if err := json.Unmarshal(b, e); err != nil {
+			e.ErrDescription = string(b)
+		}
+	}
 	return e
 }
 
