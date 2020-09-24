@@ -102,15 +102,12 @@ type ClientAccess struct {
 type Client struct {
 	Access                       ClientAccess           `json:"access"`
 	AdminURL                     string                 `json:"adminUrl"`
-	AlwaysDisplayInConsole       bool                   `json:"alwaysDisplayInConsole"`
 	Attributes                   KeyValueMap            `json:"attributes"`
-	AuthenticationFlowBindings   interface{}            `json:"authenticationFlowBindings"`
 	AuthorizationServicesEnabled bool                   `json:"authorizationServicesEnabled"`
 	BearerOnly                   bool                   `json:"bearerOnly"`
 	ClientAuthenticatorType      string                 `json:"clientAuthenticatorType"`
 	ClientID                     string                 `json:"clientId"`
 	ConsentRequired              bool                   `json:"consentRequired"`
-	DefaultClientScopes          []string               `json:"defaultClientScopes"`
 	Description                  string                 `json:"description"`
 	DirectAccessGrantsEnabled    bool                   `json:"directAccessGrantsEnabled"`
 	Enabled                      bool                   `json:"enabled"`
@@ -121,7 +118,6 @@ type Client struct {
 	Name                         string                 `json:"name"`
 	NodeReRegistrationTimeout    int                    `json:"nodeReRegistrationTimeout"`
 	NotBefore                    int                    `json:"notBefore"`
-	OptionalClientScopes         []string               `json:"optionalClientScopes"`
 	Protocol                     string                 `json:"protocol"`
 	ProtocolMappers              []ClientProtocolMapper `json:"protocolMappers"`
 	PublicClient                 bool                   `json:"publicClient"`
@@ -131,6 +127,12 @@ type Client struct {
 	StandardFlowEnabled          bool                   `json:"standardFlowEnabled"`
 	SurrogateAuthRequired        bool                   `json:"surrogateAuthRequired"`
 	WebOrigins                   []string               `json:"webOrigins"`
+
+	// todo: this fields cause 3.4 to fail spectacularly
+	//AlwaysDisplayInConsole       bool                   `json:"alwaysDisplayInConsole,omitempty"`
+	//DefaultClientScopes []string `json:"defaultClientScopes"`
+	//OptionalClientScopes         []string               `json:"optionalClientScopes"`
+	//AuthenticationFlowBindings   interface{}            `json:"authenticationFlowBindings"`
 }
 
 type ClientCreateRequest struct {
