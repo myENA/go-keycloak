@@ -357,7 +357,7 @@ func (c *APIClient) Login(ctx context.Context, req *OpenIDConnectTokenRequest, m
 
 // ParseRequestToken attempts to extract the encoded bearer token from the provided request and parse it into a modeled
 // access token type
-func (c *APIClient) ParseRequestToken(ctx context.Context, request *http.Request, claimsType jwt.Claims) (*jwt.Token, error) {
+func (c *APIClient) ParseRequestToken(ctx context.Context, request *http.Request, claimsType jwt.Claims, opts ...jwt.ParserOption) (*jwt.Token, error) {
 	if bt, ok := RequestBearerToken(request); ok {
 		return c.ParseToken(ctx, bt, claimsType)
 	}
@@ -366,7 +366,7 @@ func (c *APIClient) ParseRequestToken(ctx context.Context, request *http.Request
 
 // ParseToken will attempt to parse and validate a raw token into a modeled type.  If this method does not return
 // an error, you can safely assume the provided raw token is safe for use.
-func (c *APIClient) ParseToken(ctx context.Context, rawToken string, claimsType jwt.Claims) (*jwt.Token, error) {
+func (c *APIClient) ParseToken(ctx context.Context, rawToken string, claimsType jwt.Claims, opts ...jwt.ParserOption) (*jwt.Token, error) {
 	var (
 		jwtToken *jwt.Token
 		err      error
@@ -374,7 +374,7 @@ func (c *APIClient) ParseToken(ctx context.Context, rawToken string, claimsType 
 	if claimsType == nil {
 		claimsType = new(jwt.StandardClaims)
 	}
-	if jwtToken, err = jwt.ParseWithClaims(rawToken, claimsType, c.keyFunc(ctx)); err != nil {
+	if jwtToken, err = jwt.ParseWithClaims(rawToken, claimsType, c.keyFunc(ctx), opts...); err != nil {
 		return nil, fmt.Errorf("error parsing raw token into %T: %w", claimsType, err)
 	}
 	return jwtToken, nil
