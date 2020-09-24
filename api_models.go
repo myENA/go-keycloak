@@ -835,21 +835,23 @@ type RoleCreateRequest struct {
 }
 
 type Role struct {
-	ID                 string       `json:"id"`
-	Name               string       `json:"name"`
-	Parent             string       `json:"parent"`
-	Description        string       `json:"description"`
-	Logic              string       `json:"logic"`
-	DecisionStrategy   string       `json:"decisionStrategy"`
-	ScopeParamRequired bool         `json:"scopeParamRequired"`
-	Composite          bool         `json:"composite"`
-	Client             string       `json:"client"`
-	ClientRole         bool         `json:"clientRole"`
-	ContainerID        string       `json:"containerId"`
-	Type               string       `json:"type"`
-	Required           bool         `json:"required"`
-	Mappings           Roles        `json:"mappings"`
-	Attributes         KeyValuesMap `json:"attributes"`
+	ID                 string `json:"id"`
+	Name               string `json:"name"`
+	Description        string `json:"description"`
+	ScopeParamRequired bool   `json:"scopeParamRequired"`
+	Composite          bool   `json:"composite"`
+	ClientRole         bool   `json:"clientRole"`
+	ContainerID        string `json:"containerId"`
+
+	// todo: breaks 3.4
+	//Parent             string       `json:"parent"`
+	//Logic              string       `json:"logic"`
+	//DecisionStrategy   string       `json:"decisionStrategy"`
+	//Client             string       `json:"client"`
+	//Type               string       `json:"type"`
+	//Required           bool         `json:"required"`
+	//Mappings           Roles        `json:"mappings"`
+	//Attributes         KeyValuesMap `json:"attributes"`
 }
 
 type RoleMap map[string]*Role
