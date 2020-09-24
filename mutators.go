@@ -25,12 +25,11 @@ type APIRequestMutator func(*APIRequest) error
 
 // ParameterFormatter
 //
-// This func is called inside the NonZeroQueryMutator func to determine if and how the provided value will be added to
+// This func is called when creating request mutators to determine if and how the provided value will be added to
 // a given request's query parameter string.
 type ParameterFormatterFunc func(location, name string, value interface{}) (formatted string, valued bool)
 
-// ParameterFormatter is called by the ValuedQueryParameter and ValuedHeaderFormatter funcs when determining
-// if and how values should be added to a given request
+// ParameterFormatter is called when creating request mutators
 var ParameterFormatter ParameterFormatterFunc = DefaultParameterFormatter
 
 // DefaultParameterFormatter provides some baseline value-to-string conversions.  The 2nd argument must indicate whether
@@ -76,7 +75,7 @@ func DefaultParameterFormatter(_, _ string, v interface{}) (value string, valued
 func buildQueryMutator(k string, v, def interface{}, override, requiredValued bool) APIRequestMutator {
 	return func(r *APIRequest) error {
 		value, valued := DefaultParameterFormatter(ParameterDestinationQuery, k, v)
-		if !valued {
+		if !valued && def != nil {
 			value, valued = DefaultParameterFormatter(ParameterDestinationQuery, k, def)
 		}
 		if requiredValued && !valued {
@@ -101,25 +100,33 @@ func NonZeroQueryMutator(key string, value, defaultValue interface{}, override b
 	return buildQueryMutator(key, value, defaultValue, override, true)
 }
 
-// HeaderMutator returns a APIRequestMutator that will add or override a value in the header of the request
-func HeaderMutator(k, v string, override bool) APIRequestMutator {
+func buildHeaderMutator(k string, v, def interface{}, override, requiredValued bool) APIRequestMutator {
 	return func(r *APIRequest) error {
+		value, valued := DefaultParameterFormatter(ParameterDestinationQuery, k, v)
+		if !valued && def != nil {
+			value, valued = DefaultParameterFormatter(ParameterDestinationQuery, k, def)
+		}
+		if requiredValued && !valued {
+			return nil
+		}
 		if override {
-			r.SetHeader(k, v)
+			r.SetHeader(k, value)
 		} else {
-			r.AddHeader(k, v)
+			r.AddHeader(k, value)
 		}
 		return nil
 	}
 }
 
+// HeaderMutator returns a APIRequestMutator that will add or override a value in the header of the request
+func HeaderMutator(k, v string, override bool) APIRequestMutator {
+	return buildHeaderMutator(k, v, nil, override, false)
+}
+
 // NonZeroHeaderMutator returns a APIRequestMutator that will add or override a value in the header of a request if v
 // is a non-zero value of its type
-func NonZeroHeaderMutator(k string, v interface{}, override bool) APIRequestMutator {
-	if sv, ok := ParameterFormatter(ParameterDestinationHeader, k, v); ok {
-		return HeaderMutator(k, sv, override)
-	}
-	return nil
+func NonZeroHeaderMutator(k string, v, def interface{}, override bool) APIRequestMutator {
+	return buildHeaderMutator(k, v, def, override, true)
 }
 
 func BearerAuthRequestMutator(rawToken string) APIRequestMutator {
