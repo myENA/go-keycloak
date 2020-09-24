@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/dgrijalva/jwt-go/v4"
 	"github.com/myENA/go-keycloak/v2"
 )
 
@@ -83,17 +84,18 @@ func getTestConfigs(t *testing.T) []*testConfig {
 	return configs
 }
 
-func newAuthClient(t *testing.T, testConfig *testConfig, mutators ...keycloak.ConfigMutator) *keycloak.AuthenticatedAPIClient {
+func newClient(t *testing.T, testConfig *testConfig, mutators ...keycloak.ConfigMutator) (*keycloak.APIClient, keycloak.AuthProvider) {
 	t.Helper()
 	var (
-		cl  *keycloak.AuthenticatedAPIClient
+		cl  *keycloak.APIClient
+		ap  keycloak.AuthProvider
 		err error
 	)
 
 	if testConfig.Name == "" {
 		t.Log("Config entry missing \"name\" field")
 		t.FailNow()
-		return nil
+		return nil, nil
 	}
 
 	if mutators == nil {
@@ -103,47 +105,51 @@ func newAuthClient(t *testing.T, testConfig *testConfig, mutators ...keycloak.Co
 	if testConfig.ClientConfig.Cred == nil && testConfig.ClientConfig.NoCred == nil {
 		t.Logf("Test %q has nil cred and no_cred entries (one required)", testConfig.Name)
 		t.FailNow()
-		return nil
+		return nil, nil
 	}
 
 	if testConfig.ClientConfig.Cred != nil && testConfig.ClientConfig.NoCred != nil {
 		t.Logf("Test %q has non-nil cred and no_cred entries (only 1 allowed)", testConfig.Name)
 		t.FailNow()
-		return nil
+		return nil, nil
 	}
 
 	if testConfig.ClientConfig.Cred != nil {
-		if testConfig.ClientConfig.Cred.InstallDocument != nil {
-			cl, err = keycloak.NewAuthenticatedAPIClientWithInstallDocument(testConfig.ClientConfig.Cred.InstallDocument)
+		if testConfig.ClientConfig.Cred.BearerToken != "" {
+			ap = keycloak.NewBearerTokenAuthProvider(testConfig.ClientConfig.Cred.BearerToken)
+		} else if testConfig.ClientConfig.Cred.InstallDocument != nil {
+			ap, err = keycloak.NewConfidentialClientAuthProvider(&keycloak.ConfidentialClientAuthProviderConfig{
+				InstallDocument: testConfig.ClientConfig.Cred.InstallDocument,
+			})
 		} else {
 			t.Logf("Test %q does not have usable cred defined", testConfig.Name)
 			t.FailNow()
-			return nil
+			return nil, nil
 		}
 	} else {
-		//if testConfig.ClientConfig.NoCred.AuthServerURL == "" {
-		//	t.Logf("Test %q no_cred has empty auth_server_url field", testConfig.Name)
-		//	t.FailNow()
-		//	return nil
-		//}
-		//if testConfig.ClientConfig.NoCred.RealmName == "" {
-		//	t.Logf("Test %q no_cred has empty realm_name field", testConfig.Name)
-		//	t.FailNow()
-		//	return nil
-		//}
-		//clientConfig := keycloak.DefaultAPIClientConfig()
-		//clientConfig.AuthServerURLProvider = keycloak.NewAuthServerURLProvider(testConfig.ClientConfig.NoCred.AuthServerURL)
-		//clientConfig.RealmProvider = keycloak.NewStaticRealmProvider(testConfig.ClientConfig.NoCred.RealmName)
-		//cl, err = keycloak.NewAuthenticatedAPIClient(clientConfig, mutators...)
+		if testConfig.ClientConfig.NoCred.AuthServerURL == "" {
+			t.Logf("Test %q no_cred has empty auth_server_url field", testConfig.Name)
+			t.FailNow()
+			return nil, nil
+		}
+		if testConfig.ClientConfig.NoCred.RealmName == "" {
+			t.Logf("Test %q no_cred has empty realm_name field", testConfig.Name)
+			t.FailNow()
+			return nil, nil
+		}
+		clientConfig := keycloak.DefaultAPIClientConfig()
+		clientConfig.AuthServerURLProvider = keycloak.NewAuthServerURLProvider(testConfig.ClientConfig.NoCred.AuthServerURL)
+		clientConfig.RealmProvider = keycloak.NewStaticRealmProvider(testConfig.ClientConfig.NoCred.RealmName)
+		cl, err = keycloak.NewAPIClient(clientConfig, mutators...)
 	}
 
 	if err != nil {
 		t.Logf("Error building client for test %q: %v", testConfig.Name, err)
 		t.FailNow()
-		return nil
+		return nil, nil
 	}
 
-	return cl
+	return cl, ap
 }
 
 func wrapTestFunc(testConfig *testConfig, testFunc func(*testing.T, *testConfig)) func(*testing.T) {
@@ -166,8 +172,8 @@ testLoop:
 			testFunc = testGetIssuerConfig
 		case "well-known-configs":
 			testFunc = testWellKnownConfigs
-		//case "client-entitlement-confidential", "client-entitlement-bearer":
-		//	testFunc = testClientEntitlement
+		case "client-entitlement-confidential", "client-entitlement-bearer":
+			testFunc = testClientEntitlement
 		default:
 			t.Logf("No test case to handle entry %d %q", i, tc.Name)
 			t.Fail()
@@ -180,7 +186,7 @@ testLoop:
 
 func testGetIssuerConfig(t *testing.T, conf *testConfig) {
 	t.Parallel()
-	cl := newAuthClient(t, conf)
+	cl, _ := newClient(t, conf)
 	if cl == nil || t.Failed() {
 		return
 	}
@@ -198,7 +204,7 @@ func testGetIssuerConfig(t *testing.T, conf *testConfig) {
 func testWellKnownConfigs(t *testing.T, conf *testConfig) {
 	t.Run("oidc", func(t *testing.T) {
 		t.Parallel()
-		cl := newAuthClient(t, conf)
+		cl, _ := newClient(t, conf)
 		if cl == nil || t.Failed() {
 			return
 		}
@@ -215,7 +221,7 @@ func testWellKnownConfigs(t *testing.T, conf *testConfig) {
 	})
 	t.Run("uma2", func(t *testing.T) {
 		t.Parallel()
-		cl := newAuthClient(t, conf)
+		cl, _ := newClient(t, conf)
 		if cl == nil || t.Failed() {
 			return
 		}
@@ -236,33 +242,33 @@ func testWellKnownConfigs(t *testing.T, conf *testConfig) {
 	})
 }
 
-//func testClientEntitlement(t *testing.T, conf *testConfig) {
-//	t.Parallel()
-//	if conf.ClientID == "" {
-//		t.Log("client_id key is empty in test config")
-//		t.FailNow()
-//		return
-//	}
-//
-//	cl := newAuthClient(t, conf)
-//	if cl == nil || t.Failed() {
-//		return
-//	}
-//
-//	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-//	defer cancel()
-//
-//	claims := new(keycloak.StandardClaims)
-//	tok, err := cl.TokenService().ClientEntitlement(ctx, conf.ClientID, claims)
-//	if err != nil {
-//		t.Logf("Error fetching RPT: %v", err)
-//		t.FailNow()
-//		return
-//	}
-//
-//	if !tok.Valid {
-//		t.Logf("RPT token failed validation: %v", err)
-//		t.FailNow()
-//		return
-//	}
-//}
+func testClientEntitlement(t *testing.T, conf *testConfig) {
+	t.Parallel()
+	if conf.ClientID == "" {
+		t.Log("client_id key is empty in test config")
+		t.FailNow()
+		return
+	}
+
+	cl, ap := newClient(t, conf)
+	if cl == nil || t.Failed() {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	claims := new(jwt.StandardClaims)
+	tok, err := cl.TokenService().ClientEntitlement(ctx, ap, conf.ClientID, claims)
+	if err != nil {
+		t.Logf("Error fetching RPT: %v", err)
+		t.FailNow()
+		return
+	}
+
+	if !tok.Valid {
+		t.Logf("RPT token failed validation: %v", err)
+		t.FailNow()
+		return
+	}
+}

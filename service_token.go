@@ -12,10 +12,10 @@ import (
 )
 
 type TokenService struct {
-	c *AuthenticatedAPIClient
+	c *APIClient
 }
 
-func (c *AuthenticatedAPIClient) TokenService() *TokenService {
+func (c *APIClient) TokenService() *TokenService {
 	ps := new(TokenService)
 	ps.c = c
 	return ps
@@ -84,7 +84,7 @@ func (ts *TokenService) PermissionEvaluation(ctx context.Context, ap AuthProvide
 }
 
 // PermissionDecision can be used to determine whether a bearer token is allowed the permission requested
-func (ts *TokenService) PermissionDecision(ctx context.Context, req *OpenIDConnectTokenRequest, mutators ...APIRequestMutator) (*PermissionDecisionResponse, error) {
+func (ts *TokenService) PermissionDecision(ctx context.Context, ap AuthProvider, req *OpenIDConnectTokenRequest, mutators ...APIRequestMutator) (*PermissionDecisionResponse, error) {
 	var (
 		res  interface{}
 		resT *PermissionDecisionResponse
@@ -94,7 +94,7 @@ func (ts *TokenService) PermissionDecision(ctx context.Context, req *OpenIDConne
 		mode = UMA2ResponseModeDecision
 	)
 	req.ResponseMode = &mode
-	if res, err = ts.c.openIDConnectToken(ctx, req, mutators...); err != nil {
+	if res, err = ts.c.openIDConnectToken(ctx, ap, req, mutators...); err != nil {
 		if IsAPIError(err) && err.(*APIError).ResponseCode != http.StatusForbidden {
 			return nil, err
 		}
@@ -106,7 +106,7 @@ func (ts *TokenService) PermissionDecision(ctx context.Context, req *OpenIDConne
 	return resT, nil
 }
 
-func (ts *TokenService) OpenIDConnectToken(ctx context.Context, req *OpenIDConnectTokenRequest, mutators ...APIRequestMutator) (*OpenIDConnectToken, error) {
+func (ts *TokenService) OpenIDConnectToken(ctx context.Context, ap AuthProvider, req *OpenIDConnectTokenRequest, mutators ...APIRequestMutator) (*OpenIDConnectToken, error) {
 	var (
 		res   interface{}
 		token *OpenIDConnectToken
@@ -114,7 +114,7 @@ func (ts *TokenService) OpenIDConnectToken(ctx context.Context, req *OpenIDConne
 		err   error
 	)
 	req.ResponseMode = nil
-	if res, err = ts.c.openIDConnectToken(ctx, req, mutators...); err != nil {
+	if res, err = ts.c.openIDConnectToken(ctx, ap, req, mutators...); err != nil {
 		return nil, err
 	}
 	if token, ok = res.(*OpenIDConnectToken); !ok {
@@ -126,7 +126,7 @@ func (ts *TokenService) OpenIDConnectToken(ctx context.Context, req *OpenIDConne
 // RequestingPartyToken will attempt to automatically decode and validate a RPT returned from an OIDC token request
 func (ts *TokenService) RequestingPartyToken(ctx context.Context, ap AuthProvider, req *OpenIDConnectTokenRequest, claimsType jwt.Claims, mutators ...APIRequestMutator) (*jwt.Token, error) {
 	req.ResponseMode = nil
-	resp, err := ts.OpenIDConnectToken(ctx, req, mutators...)
+	resp, err := ts.OpenIDConnectToken(ctx, ap, req, mutators...)
 	if err != nil {
 		return nil, err
 	}

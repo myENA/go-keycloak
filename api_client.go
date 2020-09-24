@@ -189,37 +189,6 @@ func NewAPIClient(config *APIClientConfig, mutators ...ConfigMutator) (*APIClien
 	return cl, nil
 }
 
-func NewAuthenticatedAPIClient(config *APIClientConfig, ap AuthProvider, mutators ...ConfigMutator) (*AuthenticatedAPIClient, error) {
-	c, err := NewAPIClient(config, mutators...)
-	if err != nil {
-		return nil, err
-	}
-	return c.AuthenticatedClient(ap), nil
-}
-
-// NewAuthenticatedAPIClientWithProvider will construct a new APIClient using a combined provider, such as a
-// ConfidentialClientAuthProvider
-func NewAuthenticatedAPIClientWithProvider(cp CombinedProvider, mutators ...ConfigMutator) (*AuthenticatedAPIClient, error) {
-	conf := DefaultAPIClientConfig()
-	conf.AuthServerURLProvider = cp
-	conf.RealmProvider = cp
-	c, err := NewAPIClient(conf, mutators...)
-	if err != nil {
-		return nil, err
-	}
-	return c.AuthenticatedClient(cp), nil
-}
-
-// NewAuthenticatedAPIClientWithInstallDocument will construct an APIClient from an InstallDocument
-func NewAuthenticatedAPIClientWithInstallDocument(id *InstallDocument, mutators ...ConfigMutator) (*AuthenticatedAPIClient, error) {
-	// todo: support ID's for things other than a confidential client
-	ctp, err := NewConfidentialClientAuthProvider(&ConfidentialClientAuthProviderConfig{InstallDocument: id})
-	if err != nil {
-		return nil, err
-	}
-	return NewAuthenticatedAPIClientWithProvider(ctp, mutators...)
-}
-
 // AuthServerURL will return the address of the issuer this client is targeting
 func (c *APIClient) AuthServerURL() string {
 	return c.authServerURL
@@ -238,8 +207,8 @@ func (c *APIClient) RealmEnvironment(ctx context.Context) (*RealmEnvironment, er
 }
 
 // Admin returns a new AdminAPIClient for the provided realm (does not have to be the same as the auth'd realm)
-func (c *APIClient) Admin(ap AuthProvider, realmName string) *AdminAPIClient {
-	return c.AuthenticatedClient(ap).Admin(realmName)
+func (c *APIClient) Admin(realmName string, ap AuthProvider) *AdminAPIClient {
+	return &AdminAPIClient{APIClient: c, realmName: realmName, ap: ap}
 }
 
 // realmsURL builds a request path under the /realms/{realm}/... path
@@ -465,30 +434,14 @@ func (c *APIClient) openIDConnectToken(ctx context.Context, ap AuthProvider, req
 	return model, nil
 }
 
-type AuthenticatedAPIClient struct {
-	*APIClient
-	ap AuthProvider
-}
-
-func (c *APIClient) AuthenticatedClient(ap AuthProvider) *AuthenticatedAPIClient {
-	return &AuthenticatedAPIClient{APIClient: c, ap: ap}
-}
-
-func (c *AuthenticatedAPIClient) Admin(realmName string) *AdminAPIClient {
-	return &AdminAPIClient{AuthenticatedAPIClient: c, realmName: realmName}
-}
-
-func (c *AuthenticatedAPIClient) openIDConnectToken(ctx context.Context, req *OpenIDConnectTokenRequest, mutators ...APIRequestMutator) (interface{}, error) {
-	return c.APIClient.openIDConnectToken(ctx, c.ap, req, mutators...)
-}
-
 // AdminAPIClient is a simple extension of the base APIClient, adding /admin api calls
 type AdminAPIClient struct {
-	*AuthenticatedAPIClient
+	*APIClient
 	realmName string
+	ap        AuthProvider
 }
 
-func NewAdminAPIClient(config *APIClientConfig, ap AuthProvider, realmName string, mutators ...ConfigMutator) (*AdminAPIClient, error) {
+func NewAdminAPIClient(config *APIClientConfig, realmName string, ap AuthProvider, mutators ...ConfigMutator) (*AdminAPIClient, error) {
 	var (
 		c   *APIClient
 		err error
@@ -497,23 +450,31 @@ func NewAdminAPIClient(config *APIClientConfig, ap AuthProvider, realmName strin
 		return nil, err
 	}
 	c.realmName = realmName
-	return c.Admin(ap, realmName), nil
+	return c.Admin(realmName, ap), nil
 }
 
 func NewAdminAPIClientWithProvider(cp CombinedProvider, realmName string, mutators ...ConfigMutator) (*AdminAPIClient, error) {
-	c, err := NewAuthenticatedAPIClientWithProvider(cp, mutators...)
+	conf := DefaultAPIClientConfig()
+	conf.AuthServerURLProvider = cp
+	conf.RealmProvider = cp
+	c, err := NewAPIClient(conf, mutators...)
 	if err != nil {
 		return nil, err
 	}
-	return c.Admin(realmName), nil
+	return c.Admin(realmName, cp), nil
 }
 
-func NewAdminAPIClientWithInstallDocument(id *InstallDocument, realmName string, mutators ...ConfigMutator) (*AdminAPIClient, error) {
-	c, err := NewAuthenticatedAPIClientWithInstallDocument(id, mutators...)
+func NewAdminAPIClientWithInstallDocument(id *InstallDocument, realmName string, ap AuthProvider, mutators ...ConfigMutator) (*AdminAPIClient, error) {
+	// todo: support ID's for things other than a confidential client
+	ctp, err := NewConfidentialClientAuthProvider(&ConfidentialClientAuthProviderConfig{InstallDocument: id})
 	if err != nil {
 		return nil, err
 	}
-	return c.Admin(realmName), nil
+	return NewAdminAPIClientWithProvider(ctp, realmName, mutators...)
+}
+
+func (c *AdminAPIClient) AuthProvider() AuthProvider {
+	return c.ap
 }
 
 // adminRealmsURL builds a request path under the /admin/realms/{realm}/... path
