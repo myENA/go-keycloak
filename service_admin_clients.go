@@ -636,7 +636,8 @@ func (cas *AdminClientAuthzService) PermissionCreate(ctx context.Context, body *
 			mutators,
 			HeaderMutator(httpHeaderAccept, httpHeaderValueJSON, true),
 			HeaderMutator(httpHeaderContentType, httpHeaderValueJSON, true),
-		)...)
+		)...,
+	)
 	perm = new(Permission)
 	if err = handleResponse(resp, http.StatusCreated, perm, err); err != nil {
 		return nil, err
@@ -658,7 +659,10 @@ func (cas *AdminClientAuthzService) PermissionUpdate(ctx context.Context, body *
 		http.MethodPut,
 		path.Join(kcPathPartClients, cas.clientID, kcPathPartAuthz, kcPathPartResourceServer, kcPathPartPermission, finalSlug, body.ID),
 		body,
-		mutators...,
+		requestMutators(
+			mutators,
+			HeaderMutator(httpHeaderContentType, httpHeaderValueJSON, true),
+		)...,
 	)
 	return handleResponse(resp, http.StatusCreated, nil, err)
 }
