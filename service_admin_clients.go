@@ -566,7 +566,7 @@ func (cas *AdminClientAuthzService) PolicyDelete(ctx context.Context, policyID s
 		nil,
 		mutators...,
 	)
-	return handleResponse(resp, http.StatusCreated, nil, err)
+	return handleResponse(resp, http.StatusNoContent, nil, err)
 }
 
 func (cas *AdminClientAuthzService) Permissions(ctx context.Context, first, max int, mutators ...APIRequestMutator) (Permissions, error) {
