@@ -54,13 +54,12 @@ type DefaultRealmEnvironmentProvider struct {
 	envCacheTTL time.Duration
 }
 
-// NewDefaultRealmEnvironmentProvider will return to you a type of RealmEnvironmentProvider that, given that the incoming context does not
-// already have a realm defined, will always set it to the value provided to this constructor
+// NewDefaultRealmEnvironmentProvider will return to you a type of RealmEnvironmentProvider that stores realm env config
+// for an hour.
 func NewDefaultRealmEnvironmentProvider(envCacheTTL time.Duration) *DefaultRealmEnvironmentProvider {
 	return &DefaultRealmEnvironmentProvider{envCacheTTL: envCacheTTL}
 }
 
-// EnvironmentConfig attempts to construct
 func (rp *DefaultRealmEnvironmentProvider) RealmEnvironment(ctx context.Context, client *APIClient) (*RealmEnvironment, error) {
 	var (
 		v   interface{}
