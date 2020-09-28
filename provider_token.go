@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"sync"
 	"time"
+
+	"github.com/dgrijalva/jwt-go/v4"
 )
 
 const (
@@ -172,7 +174,7 @@ func (tp *ConfidentialClientTokenProvider) RefreshToken(ctx context.Context, cli
 	}
 
 	// try to refresh access token.  this has the side-effect of also validating our new token
-	if _, err = client.AuthService().ParseToken(authCtx, oidc.AccessToken, nil); err != nil {
+	if _, err = client.AuthService().ParseToken(authCtx, oidc.AccessToken, nil, jwt.WithoutAudienceValidation()); err != nil {
 		return fmt.Errorf("unable to refresh access token: %w", err)
 	}
 

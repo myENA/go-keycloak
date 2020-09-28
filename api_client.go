@@ -274,9 +274,9 @@ func (c *APIClient) AdminService() *AdminService {
 
 // RequestAccessToken attempts to extract the encoded bearer token from the provided request and parse it into a modeled
 // access token type
-func (c *APIClient) RequestAccessToken(ctx context.Context, request *http.Request, claimsType jwt.Claims) (*jwt.Token, error) {
+func (c *APIClient) RequestAccessToken(ctx context.Context, request *http.Request, claimsType jwt.Claims, parserOpts ...jwt.ParserOption) (*jwt.Token, error) {
 	if bt, ok := RequestBearerToken(request); ok {
-		return c.AuthService().ParseToken(ctx, bt, claimsType)
+		return c.AuthService().ParseToken(ctx, bt, claimsType, parserOpts...)
 	}
 	return nil, errors.New("bearer token not found in request")
 }

@@ -180,7 +180,7 @@ func (k *baseService) IntrospectRequestingPartyToken(ctx context.Context, rawRPT
 
 // ParseToken will attempt to parse and validate a raw token into a modeled type.  If this method does not return
 // an error, you can safely assume the provided raw token is safe for use.
-func (k *baseService) ParseToken(ctx context.Context, rawToken string, claimsType jwt.Claims) (*jwt.Token, error) {
+func (k *baseService) ParseToken(ctx context.Context, rawToken string, claimsType jwt.Claims, parserOpts ...jwt.ParserOption) (*jwt.Token, error) {
 	var (
 		jwtToken *jwt.Token
 		err      error
@@ -192,7 +192,7 @@ func (k *baseService) ParseToken(ctx context.Context, rawToken string, claimsTyp
 	if claimsType == nil {
 		claimsType = new(jwt.StandardClaims)
 	}
-	if jwtToken, err = jwt.ParseWithClaims(rawToken, claimsType, k.keyFunc(ctx)); err != nil {
+	if jwtToken, err = jwt.ParseWithClaims(rawToken, claimsType, k.keyFunc(ctx), parserOpts...); err != nil {
 		return nil, fmt.Errorf("error parsing raw token into %T: %w", claimsType, err)
 	}
 	return jwtToken, nil
@@ -201,7 +201,7 @@ func (k *baseService) ParseToken(ctx context.Context, rawToken string, claimsTyp
 // ClientEntitlement will attempt to call the pre-uma2 entitlement endpoint to return a Requesting Party Token
 // containing details about what aspects of the provided clientID the token for this request has access to, if any.
 // DEPRECATED: use the newer introspection workflow for  instances newer than 3.4
-func (k *baseService) ClientEntitlement(ctx context.Context, clientID string, claimsType jwt.Claims) (*jwt.Token, error) {
+func (k *baseService) ClientEntitlement(ctx context.Context, clientID string, claimsType jwt.Claims, parserOpts ...jwt.ParserOption) (*jwt.Token, error) {
 	var (
 		resp *http.Response
 		err  error
@@ -232,7 +232,7 @@ func (k *baseService) ClientEntitlement(ctx context.Context, clientID string, cl
 		return nil, err
 	}
 
-	return k.ParseToken(ctx, rptResp.RPT, claimsType)
+	return k.ParseToken(ctx, rptResp.RPT, claimsType, parserOpts...)
 }
 
 // TODO: add this as method on TokenParser?
