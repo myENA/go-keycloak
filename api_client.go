@@ -518,9 +518,9 @@ func NewAdminAPIClientWithProvider(cp CombinedProvider, realmName string, mutato
 	return c.Admin(realmName, cp), nil
 }
 
-func NewAdminAPIClientWithInstallDocument(id *InstallDocument, realmName string, parserOpts []jwt.ParserOption, mutators ...ConfigMutator) (*AdminAPIClient, error) {
+func NewAdminAPIClientWithInstallDocument(id *InstallDocument, realmName string, mutators ...ConfigMutator) (*AdminAPIClient, error) {
 	// todo: support ID's for things other than a confidential client
-	ctp, err := NewConfidentialClientAuthProvider(&ConfidentialClientAuthProviderConfig{InstallDocument: id, ParserOptions: parserOpts})
+	ctp, err := NewConfidentialClientAuthProvider(&ConfidentialClientAuthProviderConfig{InstallDocument: id})
 	if err != nil {
 		return nil, err
 	}

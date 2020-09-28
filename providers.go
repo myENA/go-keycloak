@@ -8,8 +8,6 @@ import (
 	"net/url"
 	"sync"
 	"time"
-
-	"github.com/dgrijalva/jwt-go/v4"
 )
 
 const (
@@ -87,13 +85,14 @@ type BearerTokenAuthProvider struct {
 }
 
 // NewBearerTokenAuthProvider returns a token provider implementation that returns a fixed token value.
-func NewBearerTokenAuthProvider(bearerToken string) *BearerTokenAuthProvider {
-	bt := new(BearerTokenAuthProvider)
-	bt.bearerToken = bearerToken
+func NewBearerTokenAuthProvider(bearerToken string) BearerTokenAuthProvider {
+	bt := BearerTokenAuthProvider{
+		bearerToken: bearerToken,
+	}
 	return bt
 }
 
-func NewBearerTokenAuthProviderFromRequest(request *http.Request) (*BearerTokenAuthProvider, error) {
+func NewBearerTokenAuthProviderFromRequest(request *http.Request) (BearerTokenAuthProvider, error) {
 	var (
 		bt string
 		ok bool
@@ -101,7 +100,7 @@ func NewBearerTokenAuthProviderFromRequest(request *http.Request) (*BearerTokenA
 	if bt, ok = RequestBearerToken(request); ok {
 		return NewBearerTokenAuthProvider(bt), nil
 	}
-	return nil, errors.New("missing bearer token in request")
+	return BearerTokenAuthProvider{}, errors.New("missing bearer token in request")
 }
 
 func (p BearerTokenAuthProvider) AuthMutators(_ context.Context, _ *APIClient) ([]APIRequestMutator, error) {
@@ -126,14 +125,6 @@ type ConfidentialClientAuthProviderConfig struct {
 	//
 	// The margin of safety prior to the actual deadline of the internal token to go ahead and execute a refresh
 	ExpiryMargin time.Duration `json:"expiryMargin"`
-
-	// ParserOptions [suggested]
-	//
-	// List of options to pass to parser when verifying confidential client token for use in subsequent requests
-	//
-	// As an example, if your confidential client document states that the Audience must be verified, you can pass
-	// jwt.WithAudience("targetAudience") as one of the options.
-	ParserOptions []jwt.ParserOption
 }
 
 // ConfidentialClientAuthProvider
@@ -163,18 +154,15 @@ type ConfidentialClientAuthProvider struct {
 	token          *OpenIDConnectToken
 	tokenRefreshed int64
 	tokenExpiry    int64
-
-	parserOpts []jwt.ParserOption
 }
 
 // NewConfidentialClientAuthProvider will attempt to construct a new ConfidentialClientAuthProvider for you based on
 // the provided configuration.
 func NewConfidentialClientAuthProvider(conf *ConfidentialClientAuthProviderConfig) (*ConfidentialClientAuthProvider, error) {
 	var (
-		secret    interface{}
-		secretStr string
-		id        *InstallDocument
-		ok        bool
+		secret string
+		id     *InstallDocument
+		ok     bool
 
 		expiryMargin = DefaultTokenExpirationMargin
 		tp           = new(ConfidentialClientAuthProvider)
@@ -193,9 +181,6 @@ func NewConfidentialClientAuthProvider(conf *ConfidentialClientAuthProviderConfi
 	if secret, ok = id.Credentials["secret"]; !ok {
 		return nil, errors.New("install document Credentials field is missing key \"secret\"")
 	}
-	if secretStr, ok = secret.(string); !ok {
-		return nil, errors.New("install document Credentials field \"secret\" is not a string")
-	}
 
 	// did they override default expiry margin?
 	if conf.ExpiryMargin > 0 {
@@ -206,10 +191,8 @@ func NewConfidentialClientAuthProvider(conf *ConfidentialClientAuthProviderConfi
 
 	tp.realmName = id.Realm
 	tp.clientID = id.Resource
-	tp.clientSecret = secretStr
+	tp.clientSecret = secret
 	tp.expiryMargin = expiryMargin
-
-	tp.parserOpts = conf.ParserOptions
 
 	return tp, nil
 }
@@ -252,8 +235,7 @@ func (tp *ConfidentialClientAuthProvider) Expired() bool {
 	return tp.expired()
 }
 
-// SetTokenValue will first attempt to use the locally cached last-known-good token.  If not defined or beyond the
-// expiration window, it will call RefreshToken before attempting to set the context token value.
+// AuthMutators handles token refresh and builds a list of mutators to be applied to an outgoing authenticated request
 func (tp *ConfidentialClientAuthProvider) AuthMutators(ctx context.Context, client *APIClient) ([]APIRequestMutator, error) {
 	tp.mu.RLock()
 
@@ -288,12 +270,7 @@ func (tp *ConfidentialClientAuthProvider) AuthMutators(ctx context.Context, clie
 		return nil, fmt.Errorf("unable to fetch OpenIDConnectToken: %w", err)
 	}
 
-	// try to refresh access token.  this has the side-effect of also validating our new token
-	if _, err = client.ParseToken(ctx, oidc.AccessToken, nil, tp.parserOpts...); err != nil {
-		return nil, fmt.Errorf("unable to refresh access token: %w", err)
-	}
-
-	// if valid, update client
+	// update client with new token
 	tp.token = oidc
 	tp.tokenRefreshed = time.Now().UnixNano()
 	tp.tokenExpiry = time.Now().Add((time.Duration(oidc.ExpiresIn) * time.Second) - tp.expiryMargin).UnixNano()
