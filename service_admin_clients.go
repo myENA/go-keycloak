@@ -118,7 +118,7 @@ func (cs *AdminClientsService) Update(ctx context.Context, client *Client, mutat
 
 func (cs *AdminClientsService) Delete(ctx context.Context, clientID string, mutators ...APIRequestMutator) error {
 	resp, err := cs.c.callAdminRealms(ctx, http.MethodDelete, path.Join(kcPathPartClients, clientID), nil, mutators...)
-	return handleResponse(resp, http.StatusOK, nil, err)
+	return handleResponse(resp, http.StatusNoContent, nil, err)
 }
 
 type AdminClientAuthzService struct {
