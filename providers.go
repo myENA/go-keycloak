@@ -126,6 +126,14 @@ type ConfidentialClientAuthProviderConfig struct {
 	//
 	// The margin of safety prior to the actual deadline of the internal token to go ahead and execute a refresh
 	ExpiryMargin time.Duration `json:"expiryMargin"`
+
+	// ParserOptions [suggested]
+	//
+	// List of options to pass to parser when verifying confidential client token for use in subsequent requests
+	//
+	// As an example, if your confidential client document states that the Audience must be verified, you can pass
+	// jwt.WithAudience("targetAudience") as one of the options.
+	ParserOptions []jwt.ParserOption
 }
 
 // ConfidentialClientAuthProvider
@@ -155,6 +163,8 @@ type ConfidentialClientAuthProvider struct {
 	token          *OpenIDConnectToken
 	tokenRefreshed int64
 	tokenExpiry    int64
+
+	parserOpts []jwt.ParserOption
 }
 
 // NewConfidentialClientAuthProvider will attempt to construct a new ConfidentialClientAuthProvider for you based on
@@ -198,6 +208,8 @@ func NewConfidentialClientAuthProvider(conf *ConfidentialClientAuthProviderConfi
 	tp.clientID = id.Resource
 	tp.clientSecret = secretStr
 	tp.expiryMargin = expiryMargin
+
+	tp.parserOpts = conf.ParserOptions
 
 	return tp, nil
 }
@@ -277,7 +289,7 @@ func (tp *ConfidentialClientAuthProvider) AuthMutators(ctx context.Context, clie
 	}
 
 	// try to refresh access token.  this has the side-effect of also validating our new token
-	if _, err = client.ParseToken(ctx, oidc.AccessToken, nil, jwt.WithAudience(tp.clientID)); err != nil {
+	if _, err = client.ParseToken(ctx, oidc.AccessToken, nil, tp.parserOpts...); err != nil {
 		return nil, fmt.Errorf("unable to refresh access token: %w", err)
 	}
 
