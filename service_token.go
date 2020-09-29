@@ -24,20 +24,20 @@ func (c *APIClient) TokenService() *TokenService {
 // ClientEntitlement will attempt to call the pre-uma2 entitlement endpoint to return a Requesting Party Token
 // containing details about what aspects of the provided clientID the token for this request has access to, if any.
 // DEPRECATED: use the newer token workflow for instances newer than 3.4
-func (ts *TokenService) ClientEntitlement(ctx context.Context, ap AuthProvider, clientID string, claimsType jwt.Claims, mutators ...APIRequestMutator) (*jwt.Token, error) {
+func (ts *TokenService) ClientEntitlement(ctx context.Context, realmName string, ap AuthProvider, clientID string, claimsType jwt.Claims, mutators ...APIRequestMutator) (*jwt.Token, error) {
 	var (
 		resp *http.Response
 		env  *RealmEnvironment
 		err  error
 	)
-	if env, err = ts.c.RealmEnvironment(ctx); err != nil {
+	if env, err = ts.c.RealmEnvironment(ctx, realmName); err != nil {
 		return nil, err
 	}
 	// if the keycloak instance supports uma2, use that.
 	if env.SupportsUMA2() {
 		req := NewOpenIDConnectTokenRequest(GrantTypeUMA2Ticket)
 		req.Audience = clientID
-		return ts.RequestingPartyToken(ctx, ap, req, claimsType, mutators...)
+		return ts.RequestingPartyToken(ctx, realmName, ap, req, claimsType, mutators...)
 	}
 
 	// otherwise, execute legacy entitlement api
@@ -59,7 +59,7 @@ func (ts *TokenService) ClientEntitlement(ctx context.Context, ap AuthProvider, 
 }
 
 // PermissionEvaluation will return an array of permissions granted by the server
-func (ts *TokenService) PermissionEvaluation(ctx context.Context, ap AuthProvider, req *OpenIDConnectTokenRequest, mutators ...APIRequestMutator) (EvaluatedPermissions, error) {
+func (ts *TokenService) PermissionEvaluation(ctx context.Context, realmName string, ap AuthProvider, req *OpenIDConnectTokenRequest, mutators ...APIRequestMutator) (EvaluatedPermissions, error) {
 	var (
 		body  url.Values
 		resp  *http.Response
@@ -69,7 +69,7 @@ func (ts *TokenService) PermissionEvaluation(ctx context.Context, ap AuthProvide
 
 		mode = UMA2ResponseModePermissions
 	)
-	if env, err = ts.c.RealmEnvironment(ctx); err != nil {
+	if env, err = ts.c.RealmEnvironment(ctx, realmName); err != nil {
 		return nil, err
 	}
 	req.ResponseMode = &mode
@@ -96,7 +96,7 @@ func (ts *TokenService) PermissionEvaluation(ctx context.Context, ap AuthProvide
 }
 
 // PermissionDecision can be used to determine whether a bearer token is allowed the permission requested
-func (ts *TokenService) PermissionDecision(ctx context.Context, ap AuthProvider, req *OpenIDConnectTokenRequest, mutators ...APIRequestMutator) (*PermissionDecisionResponse, error) {
+func (ts *TokenService) PermissionDecision(ctx context.Context, realmName string, ap AuthProvider, req *OpenIDConnectTokenRequest, mutators ...APIRequestMutator) (*PermissionDecisionResponse, error) {
 	var (
 		res  interface{}
 		resT *PermissionDecisionResponse
@@ -106,7 +106,7 @@ func (ts *TokenService) PermissionDecision(ctx context.Context, ap AuthProvider,
 		mode = UMA2ResponseModeDecision
 	)
 	req.ResponseMode = &mode
-	if res, err = ts.c.openIDConnectToken(ctx, ap, req, mutators...); err != nil {
+	if res, err = ts.c.openIDConnectToken(ctx, realmName, ap, req, mutators...); err != nil {
 		if IsAPIError(err) && err.(*APIError).ResponseCode != http.StatusForbidden {
 			return nil, err
 		}
@@ -118,7 +118,7 @@ func (ts *TokenService) PermissionDecision(ctx context.Context, ap AuthProvider,
 	return resT, nil
 }
 
-func (ts *TokenService) OpenIDConnectToken(ctx context.Context, ap AuthProvider, req *OpenIDConnectTokenRequest, mutators ...APIRequestMutator) (*OpenIDConnectToken, error) {
+func (ts *TokenService) OpenIDConnectToken(ctx context.Context, realmName string, ap AuthProvider, req *OpenIDConnectTokenRequest, mutators ...APIRequestMutator) (*OpenIDConnectToken, error) {
 	var (
 		res   interface{}
 		token *OpenIDConnectToken
@@ -126,7 +126,7 @@ func (ts *TokenService) OpenIDConnectToken(ctx context.Context, ap AuthProvider,
 		err   error
 	)
 	req.ResponseMode = nil
-	if res, err = ts.c.openIDConnectToken(ctx, ap, req, mutators...); err != nil {
+	if res, err = ts.c.openIDConnectToken(ctx, realmName, ap, req, mutators...); err != nil {
 		return nil, err
 	}
 	if token, ok = res.(*OpenIDConnectToken); !ok {
@@ -136,16 +136,16 @@ func (ts *TokenService) OpenIDConnectToken(ctx context.Context, ap AuthProvider,
 }
 
 // RequestingPartyToken will attempt to automatically decode and validate a RPT returned from an OIDC token request
-func (ts *TokenService) RequestingPartyToken(ctx context.Context, ap AuthProvider, req *OpenIDConnectTokenRequest, claimsType jwt.Claims, mutators ...APIRequestMutator) (*jwt.Token, error) {
+func (ts *TokenService) RequestingPartyToken(ctx context.Context, realmName string, ap AuthProvider, req *OpenIDConnectTokenRequest, claimsType jwt.Claims, mutators ...APIRequestMutator) (*jwt.Token, error) {
 	req.ResponseMode = nil
-	resp, err := ts.OpenIDConnectToken(ctx, ap, req, mutators...)
+	resp, err := ts.OpenIDConnectToken(ctx, realmName, ap, req, mutators...)
 	if err != nil {
 		return nil, err
 	}
 	return ts.c.ParseToken(ctx, resp.AccessToken, claimsType)
 }
 
-func (ts *TokenService) IntrospectRequestingPartyToken(ctx context.Context, ap AuthProvider, rawRPT string, mutators ...APIRequestMutator) (*TokenIntrospectionResults, error) {
+func (ts *TokenService) IntrospectRequestingPartyToken(ctx context.Context, realmName string, ap AuthProvider, rawRPT string, mutators ...APIRequestMutator) (*TokenIntrospectionResults, error) {
 	var (
 		body    url.Values
 		resp    *http.Response
@@ -153,7 +153,7 @@ func (ts *TokenService) IntrospectRequestingPartyToken(ctx context.Context, ap A
 		env     *RealmEnvironment
 		err     error
 	)
-	if env, err = ts.c.RealmEnvironment(ctx); err != nil {
+	if env, err = ts.c.RealmEnvironment(ctx, realmName); err != nil {
 		return nil, err
 	}
 	body = make(url.Values)

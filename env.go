@@ -9,7 +9,7 @@ import (
 
 // RealmEnvironmentProvider
 type RealmEnvironmentProvider interface {
-	RealmEnvironment(ctx context.Context, client *APIClient) (*RealmEnvironment, error)
+	RealmEnvironment(ctx context.Context, client *APIClient, realmName string) (*RealmEnvironment, error)
 }
 
 var (
@@ -30,22 +30,22 @@ func SetRealmEnvironmentProvider(prov RealmEnvironmentProvider) {
 	realmEnvProvider = prov
 }
 
-func GetRealmEnvironment(ctx context.Context, client *APIClient) (*RealmEnvironment, error) {
+func GetRealmEnvironment(ctx context.Context, client *APIClient, realmName string) (*RealmEnvironment, error) {
 	realmEnvProviderMu.RLock()
 	defer realmEnvProviderMu.RUnlock()
-	return realmEnvProvider.RealmEnvironment(ctx, client)
+	return realmEnvProvider.RealmEnvironment(ctx, client, realmName)
 }
 
-func buildRealmEnvironment(ctx context.Context, client *APIClient) (*RealmEnvironment, error) {
+func buildRealmEnvironment(ctx context.Context, client *APIClient, realmName string) (*RealmEnvironment, error) {
 	var err error
 	// if we land here, we're the one to build the cache entry
 	env := new(RealmEnvironment)
-	if env.oidc, err = client.OpenIDConfiguration(ctx); err != nil {
+	if env.oidc, err = client.OpenIDConfiguration(ctx, realmName); err != nil {
 		// ensure we unlock before returning
 		return nil, fmt.Errorf("error fetching OpenID configuration: %w", err)
 	}
 	// this is allowed to fail, as uma2 support in keycloak is "new"
-	env.uma2c, _ = client.UMA2Configuration(ctx)
+	env.uma2c, _ = client.UMA2Configuration(ctx, realmName)
 	return env, nil
 }
 
@@ -60,14 +60,14 @@ func NewDefaultRealmEnvironmentProvider(envCacheTTL time.Duration) *DefaultRealm
 	return &DefaultRealmEnvironmentProvider{envCacheTTL: envCacheTTL}
 }
 
-func (rp *DefaultRealmEnvironmentProvider) RealmEnvironment(ctx context.Context, client *APIClient) (*RealmEnvironment, error) {
+func (rp *DefaultRealmEnvironmentProvider) RealmEnvironment(ctx context.Context, client *APIClient, realmName string) (*RealmEnvironment, error) {
 	var (
 		v   interface{}
 		ok  bool
 		env *RealmEnvironment
 		err error
 
-		cacheKey = buildRealmEnvCacheKey(client.AuthServerURL(), client.RealmName())
+		cacheKey = buildRealmEnvCacheKey(client.AuthServerURL(), realmName)
 	)
 
 	// acquire read lock first
@@ -82,7 +82,7 @@ func (rp *DefaultRealmEnvironmentProvider) RealmEnvironment(ctx context.Context,
 		defer rp.mu.Unlock()
 		// test once more, as another process may have already populated cache between full lock acquisition
 		if v, ok = client.CacheBackend().Load(cacheKey); !ok {
-			if env, err = buildRealmEnvironment(ctx, client); err != nil {
+			if env, err = buildRealmEnvironment(ctx, client, realmName); err != nil {
 				return nil, err
 			}
 			// persist new cache entry

@@ -38,7 +38,7 @@ const (
 	httpHeaderContentType               = "Content-Type"
 	httpHeaderValueJSON                 = "application/json"
 	httpHeaderValueFormURLEncoded       = "application/x-www-form-urlencoded"
-	httpHeaderAuthorization             = "Authorization"
+	HTTPpHeaderAuthorization            = "Authorization"
 	httpHeaderAuthorizationBearerPrefix = "Bearer"
 	httpHeaderAuthorizationBasicPrefix  = "Basic"
 	httpHeaderAuthValueFormat           = "%s %s"
@@ -116,11 +116,6 @@ type APIClientConfig struct {
 	// This is called once during client initialization to determine the target keycloak instance
 	AuthServerURLProvider AuthServerURLProvider
 
-	// RealmProvider [required]
-	//
-	// This is called once during client initialization to determine which realm to scope queries against
-	RealmProvider RealmProvider
-
 	// CacheBackend [optional]
 	//
 	// Optionally provide your own cache implementation.  This cache is used, by default, for realm environment and
@@ -142,7 +137,6 @@ type APIClientConfig struct {
 func DefaultAPIClientConfig() *APIClientConfig {
 	c := APIClientConfig{
 		AuthServerURLProvider: defaultAuthServerURLProvider(),
-		RealmProvider:         NewStaticRealmProvider("master"),
 		CacheBackend:          globalCache,
 		HTTPClient:            cleanhttp.DefaultClient(),
 		Debug:                 new(DebugConfig),
@@ -159,8 +153,6 @@ type APIClient struct {
 	cache CacheBackend
 	mr    requestMutatorRunner
 	hc    *http.Client
-
-	realmName string
 }
 
 // NewAPIClient will attempt to construct and return a APIClient to you
@@ -180,10 +172,6 @@ func NewAPIClient(config *APIClientConfig, mutators ...ConfigMutator) (*APIClien
 	}
 	cl.authServerURL = strings.TrimRight(cl.authServerURL, "/")
 
-	if cl.realmName, err = cc.RealmProvider.RealmName(); err != nil {
-		return nil, err
-	}
-
 	cl.cache = cc.CacheBackend
 	cl.hc = cc.HTTPClient
 	cl.mr = buildRequestMutatorRunner(cc.Debug)
@@ -196,30 +184,8 @@ func (c *APIClient) AuthServerURL() string {
 	return c.authServerURL
 }
 
-func (c *APIClient) RealmName() string {
-	return c.realmName
-}
-
 func (c *APIClient) CacheBackend() CacheBackend {
 	return c.cache
-}
-
-func (c *APIClient) RealmEnvironment(ctx context.Context) (*RealmEnvironment, error) {
-	return GetRealmEnvironment(ctx, c)
-}
-
-// Admin returns a new AdminAPIClient for the provided realm (does not have to be the same as the auth'd realm)
-func (c *APIClient) Admin(realmName string, ap AuthProvider) *AdminAPIClient {
-	return &AdminAPIClient{APIClient: c, realmName: realmName, ap: ap}
-}
-
-// realmsURL builds a request path under the /realms/{realm}/... path
-func (c *APIClient) realmsURL(bits ...string) string {
-	return fmt.Sprintf(kcURLPathRealmsFormat, c.authServerURL, c.realmName, path.Join(bits...))
-}
-
-func (c *APIClient) callRealms(ctx context.Context, ap AuthProvider, method, requestPath string, body interface{}, mutators ...APIRequestMutator) (*http.Response, error) {
-	return c.Call(ctx, ap, method, c.realmsURL(requestPath), body, mutators...)
 }
 
 func (c *APIClient) Do(ctx context.Context, req *APIRequest, mutators ...APIRequestMutator) (*http.Response, error) {
@@ -275,9 +241,13 @@ func (c *APIClient) Call(ctx context.Context, ap AuthProvider, method, requestUR
 	return c.Do(ctx, req, mutators...)
 }
 
+func (c *APIClient) RealmEnvironment(ctx context.Context, realmName string) (*RealmEnvironment, error) {
+	return GetRealmEnvironment(ctx, c, realmName)
+}
+
 // RealmIssuerConfiguration returns metadata about the keycloak realm instance being connected to, such as the public
 // key for token signing.
-func (c *APIClient) RealmIssuerConfiguration(ctx context.Context, mutators ...APIRequestMutator) (*RealmIssuerConfiguration, error) {
+func (c *APIClient) RealmIssuerConfiguration(ctx context.Context, realmName string, mutators ...APIRequestMutator) (*RealmIssuerConfiguration, error) {
 	var (
 		resp *http.Response
 		ic   *RealmIssuerConfiguration
@@ -287,7 +257,7 @@ func (c *APIClient) RealmIssuerConfiguration(ctx context.Context, mutators ...AP
 		ctx,
 		nil,
 		http.MethodGet,
-		c.realmsURL(),
+		c.realmsURL(realmName),
 		nil,
 		requestMutators(
 			mutators,
@@ -302,7 +272,7 @@ func (c *APIClient) RealmIssuerConfiguration(ctx context.Context, mutators ...AP
 }
 
 // OpenIDConfiguration returns well-known open-id configuration values for the provided realm
-func (c *APIClient) OpenIDConfiguration(ctx context.Context, mutators ...APIRequestMutator) (*OpenIDConfiguration, error) {
+func (c *APIClient) OpenIDConfiguration(ctx context.Context, realmName string, mutators ...APIRequestMutator) (*OpenIDConfiguration, error) {
 	var (
 		resp *http.Response
 		oidc *OpenIDConfiguration
@@ -312,7 +282,7 @@ func (c *APIClient) OpenIDConfiguration(ctx context.Context, mutators ...APIRequ
 		ctx,
 		nil,
 		http.MethodGet,
-		c.realmsURL(kcPathOIDC),
+		c.realmsURL(realmName, kcPathOIDC),
 		nil,
 		requestMutators(
 			mutators,
@@ -328,7 +298,7 @@ func (c *APIClient) OpenIDConfiguration(ctx context.Context, mutators ...APIRequ
 
 // UMA2Configuration returns well-known uma2 configuration values for the provided realm, assuming you are running
 // keycloak > 3.4
-func (c *APIClient) UMA2Configuration(ctx context.Context, mutators ...APIRequestMutator) (*UMA2Configuration, error) {
+func (c *APIClient) UMA2Configuration(ctx context.Context, realmName string, mutators ...APIRequestMutator) (*UMA2Configuration, error) {
 	var (
 		resp *http.Response
 		uma2 *UMA2Configuration
@@ -338,7 +308,7 @@ func (c *APIClient) UMA2Configuration(ctx context.Context, mutators ...APIReques
 		ctx,
 		nil,
 		http.MethodGet,
-		c.realmsURL(kcPathUMA2C),
+		c.realmsURL(realmName, kcPathUMA2C),
 		nil,
 		requestMutators(
 			mutators,
@@ -352,14 +322,14 @@ func (c *APIClient) UMA2Configuration(ctx context.Context, mutators ...APIReques
 	return uma2, nil
 }
 
-func (c *APIClient) JSONWebKeys(ctx context.Context, mutators ...APIRequestMutator) (*JSONWebKeySet, error) {
+func (c *APIClient) JSONWebKeys(ctx context.Context, realmName string, mutators ...APIRequestMutator) (*JSONWebKeySet, error) {
 	var (
 		resp *http.Response
 		jwks *JSONWebKeySet
 		env  *RealmEnvironment
 		err  error
 	)
-	if env, err = c.RealmEnvironment(ctx); err != nil {
+	if env, err = c.RealmEnvironment(ctx, realmName); err != nil {
 		return nil, err
 	}
 	resp, err = c.Call(
@@ -379,7 +349,7 @@ func (c *APIClient) JSONWebKeys(ctx context.Context, mutators ...APIRequestMutat
 	return jwks, nil
 }
 
-func (c *APIClient) Login(ctx context.Context, req *OpenIDConnectTokenRequest, mutators ...APIRequestMutator) (*OpenIDConnectToken, error) {
+func (c *APIClient) Login(ctx context.Context, req *OpenIDConnectTokenRequest, realmName string, mutators ...APIRequestMutator) (*OpenIDConnectToken, error) {
 	var (
 		res   interface{}
 		token *OpenIDConnectToken
@@ -387,15 +357,10 @@ func (c *APIClient) Login(ctx context.Context, req *OpenIDConnectTokenRequest, m
 		err   error
 	)
 	req.ResponseMode = nil
-	res, err = c.openIDConnectToken(
-		ctx,
-		nil,
-		req,
-		requestMutators(
-			mutators,
-			HeaderMutator(httpHeaderAccept, httpHeaderValueJSON, true),
-		)...,
-	)
+	res, err = c.openIDConnectToken(ctx, realmName, nil, req, requestMutators(
+		mutators,
+		HeaderMutator(httpHeaderAccept, httpHeaderValueJSON, true),
+	)...)
 	if err != nil {
 		return nil, err
 	}
@@ -443,7 +408,7 @@ func (c *APIClient) keyFunc(ctx context.Context) jwt.Keyfunc {
 	}
 }
 
-func (c *APIClient) openIDConnectToken(ctx context.Context, ap AuthProvider, req *OpenIDConnectTokenRequest, mutators ...APIRequestMutator) (interface{}, error) {
+func (c *APIClient) openIDConnectToken(ctx context.Context, realmName string, ap AuthProvider, req *OpenIDConnectTokenRequest, mutators ...APIRequestMutator) (interface{}, error) {
 	var (
 		body  url.Values
 		resp  *http.Response
@@ -451,7 +416,7 @@ func (c *APIClient) openIDConnectToken(ctx context.Context, ap AuthProvider, req
 		model interface{}
 		err   error
 	)
-	if env, err = c.RealmEnvironment(ctx); err != nil {
+	if env, err = c.RealmEnvironment(ctx, realmName); err != nil {
 		return nil, err
 	}
 	if body, err = query.Values(req); err != nil {
@@ -488,6 +453,15 @@ func (c *APIClient) openIDConnectToken(ctx context.Context, ap AuthProvider, req
 	return model, nil
 }
 
+// realmsURL builds a request path under the /realms/{realm}/... path
+func (c *APIClient) realmsURL(realmName string, bits ...string) string {
+	return fmt.Sprintf(kcURLPathRealmsFormat, c.authServerURL, realmName, path.Join(bits...))
+}
+
+func (c *APIClient) callRealms(ctx context.Context, realmName string, ap AuthProvider, method, requestPath string, body interface{}, mutators ...APIRequestMutator) (*http.Response, error) {
+	return c.Call(ctx, ap, method, c.realmsURL(realmName, requestPath), body, mutators...)
+}
+
 // AdminAPIClient is a simple extension of the base APIClient, adding /admin api calls
 type AdminAPIClient struct {
 	*APIClient
@@ -503,19 +477,17 @@ func NewAdminAPIClient(config *APIClientConfig, realmName string, ap AuthProvide
 	if c, err = NewAPIClient(config, mutators...); err != nil {
 		return nil, err
 	}
-	c.realmName = realmName
-	return c.Admin(realmName, ap), nil
+	return c.AdminClient(realmName, ap), nil
 }
 
 func NewAdminAPIClientWithProvider(cp CombinedProvider, realmName string, mutators ...ConfigMutator) (*AdminAPIClient, error) {
 	conf := DefaultAPIClientConfig()
 	conf.AuthServerURLProvider = cp
-	conf.RealmProvider = cp
 	c, err := NewAPIClient(conf, mutators...)
 	if err != nil {
 		return nil, err
 	}
-	return c.Admin(realmName, cp), nil
+	return c.AdminClient(realmName, cp), nil
 }
 
 func NewAdminAPIClientWithInstallDocument(id *InstallDocument, realmName string, mutators ...ConfigMutator) (*AdminAPIClient, error) {
@@ -525,6 +497,11 @@ func NewAdminAPIClientWithInstallDocument(id *InstallDocument, realmName string,
 		return nil, err
 	}
 	return NewAdminAPIClientWithProvider(ctp, realmName, mutators...)
+}
+
+// AdminClient returns a new AdminAPIClient for the provided realm (does not have to be the same as the auth'd realm)
+func (c *APIClient) AdminClient(realmName string, ap AuthProvider) *AdminAPIClient {
+	return &AdminAPIClient{APIClient: c, realmName: realmName, ap: ap}
 }
 
 func (c *AdminAPIClient) AuthProvider() AuthProvider {

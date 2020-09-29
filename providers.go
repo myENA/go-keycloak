@@ -62,20 +62,6 @@ func defaultAuthServerURLProvider() AuthServerURLProvider {
 	return NewAuthServerURLProvider("http://127.0.0.1/auth")
 }
 
-type RealmProvider interface {
-	RealmName() (string, error)
-}
-
-type staticRealmProvider string
-
-func NewStaticRealmProvider(realmName string) RealmProvider {
-	return staticRealmProvider(realmName)
-}
-
-func (rp staticRealmProvider) RealmName() (string, error) {
-	return string(rp), nil
-}
-
 type AuthProvider interface {
 	AuthMutators(context.Context, *APIClient) ([]APIRequestMutator, error)
 }
@@ -110,7 +96,6 @@ func (p BearerTokenAuthProvider) AuthMutators(_ context.Context, _ *APIClient) (
 // CombinedProvider describes any provider that can fulfill auth url, realm, and renewable bearer token roles
 type CombinedProvider interface {
 	AuthServerURLProvider
-	RealmProvider
 	AuthProvider
 }
 
@@ -266,7 +251,7 @@ func (tp *ConfidentialClientAuthProvider) AuthMutators(ctx context.Context, clie
 	req.ClientSecret = tp.clientSecret
 
 	// fetch new oidc token
-	if oidc, err = client.Login(ctx, req); err != nil {
+	if oidc, err = client.Login(ctx, req, tp.realmName); err != nil {
 		return nil, fmt.Errorf("unable to fetch OpenIDConnectToken: %w", err)
 	}
 

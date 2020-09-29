@@ -9,6 +9,8 @@ import (
 	"io/ioutil"
 	"net/http"
 	"strings"
+
+	"github.com/dgrijalva/jwt-go/v4"
 )
 
 // RequestBearerToken attempts to extract the encoded "Bearer" token from the provided request's "Authorization" header
@@ -16,7 +18,7 @@ func RequestBearerToken(request *http.Request) (string, bool) {
 	if request == nil {
 		return "", false
 	}
-	for _, v := range request.Header.Values(httpHeaderAuthorization) {
+	for _, v := range request.Header.Values(HTTPpHeaderAuthorization) {
 		if strings.HasPrefix(v, httpHeaderAuthorizationBearerPrefix) {
 			return strings.TrimPrefix(v, httpHeaderAuthorizationBearerPrefix+" "), true
 		}
@@ -33,6 +35,35 @@ func parseResponseLocations(resp *http.Response) ([]string, error) {
 		return nil, errors.New("unable to locate new id in response")
 	}
 	return locations, nil
+}
+
+func ClaimsSource(claims jwt.Claims) (string, string, error) {
+	var iss string
+	if sc, ok := claims.(*jwt.StandardClaims); ok {
+		iss = sc.Issuer
+	} else if mc, ok := claims.(jwt.MapClaims); ok {
+		if v, ok := mc["iss"]; ok {
+			iss, _ = v.(string)
+		}
+	}
+	if iss == "" {
+		return "", "", fmt.Errorf("unable to find issuer in claims type %T", claims)
+	}
+	split := strings.SplitN(iss, "/realms/", 2)
+	if len(split) != 2 {
+		return "", "", fmt.Errorf("unable to split token issuer %q into url : realm", iss)
+	}
+	return strings.TrimRight(split[0], "/"), strings.Trim(split[1], "/"), nil
+}
+
+// BearerTokenSource performs an unverified parse of the token to extract the auth server url and realm values
+func BearerTokenSource(bt string) (string, string, error) {
+	claims := new(jwt.StandardClaims)
+	_, _, err := (new(jwt.Parser)).ParseUnverified(bt, claims)
+	if err != nil {
+		return "", "", fmt.Errorf("error parsing bearer token: %w", err)
+	}
+	return ClaimsSource(claims)
 }
 
 func CompileAPIClientConfig(provided *APIClientConfig, mutators ...ConfigMutator) *APIClientConfig {
@@ -52,9 +83,6 @@ func CompileAPIClientConfig(provided *APIClientConfig, mutators ...ConfigMutator
 
 	if provided.AuthServerURLProvider != nil {
 		actual.AuthServerURLProvider = provided.AuthServerURLProvider
-	}
-	if provided.RealmProvider != nil {
-		actual.RealmProvider = provided.RealmProvider
 	}
 	if provided.CacheBackend != nil {
 		actual.CacheBackend = provided.CacheBackend

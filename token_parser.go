@@ -62,17 +62,17 @@ func NewX509TokenParser(cacheTTL time.Duration) *X509TokenParser {
 
 func (tp *X509TokenParser) Parse(ctx context.Context, client *APIClient, token *jwt.Token) (interface{}, error) {
 	var (
-		kid      string
-		cacheKey string
-		pub      interface{}
-		rpk      *rsa.PublicKey
-		epk      *ecdsa.PublicKey
-		expires  *time.Time
-		ok       bool
-		err      error
+		kid       string
+		cacheKey  string
+		realmName string
+		pub       interface{}
+		rpk       *rsa.PublicKey
+		epk       *ecdsa.PublicKey
+		expires   *time.Time
+		ok        bool
+		err       error
 
 		authServerURL = client.AuthServerURL()
-		realmName     = client.RealmName()
 	)
 
 	if token == nil {
@@ -89,6 +89,10 @@ func (tp *X509TokenParser) Parse(ctx context.Context, client *APIClient, token *
 		return nil, fmt.Errorf("token header key \"kid\" has non-string value: %v (%[1]T)", v)
 	}
 
+	if _, realmName, err = ClaimsSource(token.Claims); err != nil {
+		return nil, err
+	}
+
 	cacheKey = buildPKCacheKey(authServerURL, realmName, kid)
 
 	tp.mu.RLock()
@@ -97,7 +101,7 @@ func (tp *X509TokenParser) Parse(ctx context.Context, client *APIClient, token *
 		tp.mu.Lock()
 		defer tp.mu.Unlock()
 		if pub, ok = client.CacheBackend().Load(cacheKey); !ok {
-			if pub, expires, err = tp.fetchPK(ctx, client, kid); err != nil {
+			if pub, expires, err = tp.fetchPK(ctx, client, realmName, kid); err != nil {
 				return nil, fmt.Errorf("error loading public key: %w", err)
 			}
 			client.CacheBackend().StoreUntil(cacheKey, pub, *expires)
@@ -146,14 +150,14 @@ func (tp *X509TokenParser) supports(alg string) bool {
 	return false
 }
 
-func (tp *X509TokenParser) fetchPKLegacy(ctx context.Context, client *APIClient) (interface{}, *time.Time, error) {
+func (tp *X509TokenParser) fetchPKLegacy(ctx context.Context, client *APIClient, realmName string) (interface{}, *time.Time, error) {
 	var (
 		conf *RealmIssuerConfiguration
 		b    []byte
 		pub  interface{}
 		err  error
 	)
-	if conf, err = client.RealmIssuerConfiguration(ctx); err != nil {
+	if conf, err = client.RealmIssuerConfiguration(ctx, realmName); err != nil {
 		return nil, nil, fmt.Errorf("error attempting to fetch public key from legacy realm info endpoint: %w", err)
 	}
 	if b, err = base64.StdEncoding.DecodeString(conf.PublicKey); err != nil {
@@ -166,7 +170,7 @@ func (tp *X509TokenParser) fetchPKLegacy(ctx context.Context, client *APIClient)
 	return pub, &exp, nil
 }
 
-func (tp *X509TokenParser) fetchPKByID(ctx context.Context, client *APIClient, kid string) (interface{}, *time.Time, error) {
+func (tp *X509TokenParser) fetchPKByID(ctx context.Context, client *APIClient, realmName, kid string) (interface{}, *time.Time, error) {
 	var (
 		b    []byte
 		jwks *JSONWebKeySet
@@ -174,11 +178,11 @@ func (tp *X509TokenParser) fetchPKByID(ctx context.Context, client *APIClient, k
 		cert *x509.Certificate
 		err  error
 	)
-	if jwks, err = client.JSONWebKeys(ctx); err != nil {
+	if jwks, err = client.JSONWebKeys(ctx, realmName); err != nil {
 		return nil, nil, fmt.Errorf("error fetching json web keys: %w", err)
 	}
 	if jwk = jwks.KeychainByID(kid); jwk == nil {
-		return nil, nil, fmt.Errorf("issuer %q realm %q has no key with id %q", client.AuthServerURL(), client.RealmName(), kid)
+		return nil, nil, fmt.Errorf("issuer %q realm %q has no key with id %q", client.AuthServerURL(), realmName, kid)
 	}
 	// todo: use full chain
 	if len(jwk.X509CertificateChain) == 0 {
@@ -193,15 +197,15 @@ func (tp *X509TokenParser) fetchPKByID(ctx context.Context, client *APIClient, k
 	return cert.PublicKey, &cert.NotAfter, nil
 }
 
-func (tp *X509TokenParser) fetchPK(ctx context.Context, client *APIClient, keyID string) (interface{}, *time.Time, error) {
-	env, err := client.RealmEnvironment(ctx)
+func (tp *X509TokenParser) fetchPK(ctx context.Context, client *APIClient, realmName, keyID string) (interface{}, *time.Time, error) {
+	env, err := client.RealmEnvironment(ctx, realmName)
 	if err != nil {
 		return nil, nil, err
 	}
 	if env.SupportsUMA2() {
-		if pk, deadline, err := tp.fetchPKByID(ctx, client, keyID); err == nil {
+		if pk, deadline, err := tp.fetchPKByID(ctx, client, realmName, keyID); err == nil {
 			return pk, deadline, nil
 		}
 	}
-	return tp.fetchPKLegacy(ctx, client)
+	return tp.fetchPKLegacy(ctx, client, realmName)
 }

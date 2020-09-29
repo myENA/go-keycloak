@@ -132,7 +132,7 @@ func NonZeroHeaderMutator(k string, v, def interface{}, override bool) APIReques
 func BearerAuthRequestMutator(rawToken string) APIRequestMutator {
 	return func(r *APIRequest) error {
 		if rawToken != "" {
-			r.SetHeader(httpHeaderAuthorization, fmt.Sprintf(httpHeaderAuthValueFormat, httpHeaderAuthorizationBearerPrefix, rawToken))
+			r.SetHeader(HTTPpHeaderAuthorization, fmt.Sprintf(httpHeaderAuthValueFormat, httpHeaderAuthorizationBearerPrefix, rawToken))
 		}
 		return nil
 	}
@@ -141,7 +141,7 @@ func BearerAuthRequestMutator(rawToken string) APIRequestMutator {
 func BasicAuthRequestMutator(username, password string) APIRequestMutator {
 	return func(r *APIRequest) error {
 		r.SetHeader(
-			httpHeaderAuthorization,
+			HTTPpHeaderAuthorization,
 			fmt.Sprintf(
 				httpHeaderAuthValueFormat,
 				httpHeaderAuthorizationBasicPrefix,
