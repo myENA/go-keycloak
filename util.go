@@ -56,8 +56,8 @@ func ClaimsSource(claims jwt.Claims) (string, string, error) {
 	return strings.TrimRight(split[0], "/"), strings.Trim(split[1], "/"), nil
 }
 
-// BearerTokenSource performs an unverified parse of the token to extract the auth server url and realm values
-func BearerTokenSource(bt string) (string, string, error) {
+// TokenSource performs an unverified parse of the token to extract the auth server url and realm values
+func TokenSource(bt string) (string, string, error) {
 	claims := new(jwt.StandardClaims)
 	_, _, err := (new(jwt.Parser)).ParseUnverified(bt, claims)
 	if err != nil {

@@ -89,7 +89,7 @@ func (tp *X509TokenParser) Parse(ctx context.Context, client *APIClient, token *
 		return nil, fmt.Errorf("token header key \"kid\" has non-string value: %v (%[1]T)", v)
 	}
 
-	if _, realmName, err = ClaimsSource(token.Claims); err != nil {
+	if _, realmName, err = TokenSource(token.Raw); err != nil {
 		return nil, err
 	}
 
