@@ -82,9 +82,9 @@ func buildQueryMutator(k string, v, def interface{}, override, requiredValued bo
 			return nil
 		}
 		if override {
-			r.SetQueryParameter(k, []string{value})
+			r.SetQueryParameter(k, value)
 		} else {
-			r.AddQueryParameter(k, []string{value})
+			r.AddQueryParameter(k, value)
 		}
 		return nil
 	}
