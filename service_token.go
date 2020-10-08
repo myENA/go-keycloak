@@ -24,7 +24,7 @@ func (c *APIClient) TokenService() *TokenService {
 // ClientEntitlement will attempt to call the pre-uma2 entitlement endpoint to return a Requesting Party Token
 // containing details about what aspects of the provided clientID the token for this request has access to, if any.
 // DEPRECATED: use the newer token workflow for instances newer than 3.4
-func (ts *TokenService) ClientEntitlement(ctx context.Context, realmName string, ap AuthProvider, clientID string, claimsType jwt.Claims, mutators ...APIRequestMutator) (*jwt.Token, error) {
+func (ts *TokenService) ClientEntitlement(ctx context.Context, realmName string, ap AuthProvider, clientID string, claimsType jwt.Claims, parserOpts []jwt.ParserOption, mutators ...APIRequestMutator) (*jwt.Token, error) {
 	var (
 		resp *http.Response
 		env  *RealmEnvironment
@@ -37,7 +37,7 @@ func (ts *TokenService) ClientEntitlement(ctx context.Context, realmName string,
 	if env.SupportsUMA2() {
 		req := NewOpenIDConnectTokenRequest(GrantTypeUMA2Ticket)
 		req.Audience = clientID
-		return ts.RequestingPartyToken(ctx, realmName, ap, req, claimsType, mutators...)
+		return ts.RequestingPartyToken(ctx, realmName, ap, req, claimsType, parserOpts, mutators...)
 	}
 
 	// otherwise, execute legacy entitlement api
@@ -55,7 +55,7 @@ func (ts *TokenService) ClientEntitlement(ctx context.Context, realmName string,
 	if err = handleResponse(resp, http.StatusOK, rptResp, err); err != nil {
 		return nil, err
 	}
-	return ts.c.ParseToken(ctx, rptResp.RPT, claimsType)
+	return ts.c.ParseToken(ctx, rptResp.RPT, claimsType, parserOpts...)
 }
 
 // PermissionEvaluation will return an array of permissions granted by the server
@@ -136,13 +136,13 @@ func (ts *TokenService) OpenIDConnectToken(ctx context.Context, realmName string
 }
 
 // RequestingPartyToken will attempt to automatically decode and validate a RPT returned from an OIDC token request
-func (ts *TokenService) RequestingPartyToken(ctx context.Context, realmName string, ap AuthProvider, req *OpenIDConnectTokenRequest, claimsType jwt.Claims, mutators ...APIRequestMutator) (*jwt.Token, error) {
+func (ts *TokenService) RequestingPartyToken(ctx context.Context, realmName string, ap AuthProvider, req *OpenIDConnectTokenRequest, claimsType jwt.Claims, parserOpts []jwt.ParserOption, mutators ...APIRequestMutator) (*jwt.Token, error) {
 	req.ResponseMode = nil
 	resp, err := ts.OpenIDConnectToken(ctx, realmName, ap, req, mutators...)
 	if err != nil {
 		return nil, err
 	}
-	return ts.c.ParseToken(ctx, resp.AccessToken, claimsType)
+	return ts.c.ParseToken(ctx, resp.AccessToken, claimsType, parserOpts...)
 }
 
 func (ts *TokenService) IntrospectRequestingPartyToken(ctx context.Context, realmName string, ap AuthProvider, rawRPT string, mutators ...APIRequestMutator) (*TokenIntrospectionResults, error) {

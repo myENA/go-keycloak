@@ -372,9 +372,9 @@ func (c *APIClient) Login(ctx context.Context, req *OpenIDConnectTokenRequest, r
 
 // ParseRequestToken attempts to extract the encoded bearer token from the provided request and parse it into a modeled
 // access token type
-func (c *APIClient) ParseRequestToken(ctx context.Context, request *http.Request, claimsType jwt.Claims, opts ...jwt.ParserOption) (*jwt.Token, error) {
+func (c *APIClient) ParseRequestToken(ctx context.Context, request *http.Request, claimsType jwt.Claims, parserOpts ...jwt.ParserOption) (*jwt.Token, error) {
 	if bt, ok := RequestBearerToken(request); ok {
-		return c.ParseToken(ctx, bt, claimsType, opts...)
+		return c.ParseToken(ctx, bt, claimsType, parserOpts...)
 	}
 	return nil, errors.New("bearer token not found in request")
 }
