@@ -48,7 +48,7 @@ func (ts *TokenService) ClientEntitlement(ctx context.Context, realmName string,
 		ctx,
 		ap,
 		http.MethodGet,
-		ts.c.realmsURL(kcPathPartAuthz, kcPathPartEntitlement, clientID),
+		ts.c.realmsURL(realmName, kcPathPartAuthz, kcPathPartEntitlement, clientID),
 		nil,
 		HeaderMutator(httpHeaderAccept, httpHeaderValueJSON, true),
 	)
