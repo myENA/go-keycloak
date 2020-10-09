@@ -82,12 +82,7 @@ func (r *APIRequest) SetHeader(name, value string) {
 }
 
 func (r *APIRequest) SetHeaders(headers url.Values) {
-	r.headers = make(url.Values)
-	for k, vs := range headers {
-		for _, v := range vs {
-			r.AddHeader(k, v)
-		}
-	}
+	r.headers = headers
 }
 
 func (r *APIRequest) RemoveHeader(name string) {

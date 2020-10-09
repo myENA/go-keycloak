@@ -261,7 +261,7 @@ func (c *APIClient) RealmIssuerConfiguration(ctx context.Context, realmName stri
 		nil,
 		requestMutators(
 			mutators,
-			QueryMutator(httpHeaderAccept, httpHeaderValueJSON, true),
+			HeaderMutator(httpHeaderAccept, httpHeaderValueJSON, true),
 		)...,
 	)
 	ic = new(RealmIssuerConfiguration)
@@ -286,7 +286,7 @@ func (c *APIClient) OpenIDConfiguration(ctx context.Context, realmName string, m
 		nil,
 		requestMutators(
 			mutators,
-			QueryMutator(httpHeaderAccept, httpHeaderValueJSON, true),
+			HeaderMutator(httpHeaderAccept, httpHeaderValueJSON, true),
 		)...,
 	)
 	oidc = new(OpenIDConfiguration)
@@ -312,7 +312,7 @@ func (c *APIClient) UMA2Configuration(ctx context.Context, realmName string, mut
 		nil,
 		requestMutators(
 			mutators,
-			QueryMutator(httpHeaderAccept, httpHeaderValueJSON, true),
+			HeaderMutator(httpHeaderAccept, httpHeaderValueJSON, true),
 		)...,
 	)
 	uma2 = new(UMA2Configuration)
@@ -339,7 +339,7 @@ func (c *APIClient) JSONWebKeys(ctx context.Context, realmName string, mutators 
 		env.JSONWebKeysEndpoint(),
 		nil, requestMutators(
 			mutators,
-			QueryMutator(httpHeaderAccept, httpHeaderValueJSON, true),
+			HeaderMutator(httpHeaderAccept, httpHeaderValueJSON, true),
 		)...,
 	)
 	jwks = new(JSONWebKeySet)
