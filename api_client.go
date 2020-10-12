@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"path"
 	"strings"
+	"time"
 
 	"github.com/dgrijalva/jwt-go/v4"
 	"github.com/google/go-querystring/query"
@@ -15,6 +16,8 @@ import (
 )
 
 const (
+	HTTPpHeaderAuthorization = "Authorization"
+
 	// grant type values
 	GrantTypeCode              = "code"
 	GrantTypeUMA2Ticket        = "urn:ietf:params:oauth:grant-type:uma-ticket"
@@ -27,6 +30,25 @@ const (
 	UMA2ResponseModeDecision    = "decision"
 	UMA2ResponseModePermissions = "permissions"
 
+	DecisionStrategyUnanimous   = "UNANIMOUS"
+	DecisionStrategyAffirmative = "AFFIRMATIVE"
+	DecisionStrategyPositive    = "POSITIVE"
+
+	PermissionTypeResource = "resource"
+	PermissionTypeRole     = "role"
+
+	PolicyTypeRole       = "role"
+	PolicyTypeJavascript = "js"
+	PolicyTypeTime       = "time"
+
+	LogicPositive = "POSITIVE"
+	LogicNegative = "NEGATIVE"
+
+	// DefaultTokenExpirationMargin will be used if you do not specify your own ExpiryMargin key in the config
+	DefaultTokenExpirationMargin = 2 * time.Second
+)
+
+const (
 	// cache stuff
 	pkKeyPrefix = "pk"
 	pkKeyFormat = pkKeyPrefix + "\n%s\n%s\n%s"
@@ -38,7 +60,6 @@ const (
 	httpHeaderContentType               = "Content-Type"
 	httpHeaderValueJSON                 = "application/json"
 	httpHeaderValueFormURLEncoded       = "application/x-www-form-urlencoded"
-	HTTPpHeaderAuthorization            = "Authorization"
 	httpHeaderAuthorizationBearerPrefix = "Bearer"
 	httpHeaderAuthorizationBasicPrefix  = "Basic"
 	httpHeaderAuthValueFormat           = "%s %s"
@@ -90,6 +111,18 @@ const (
 	kcPathPartTime               = "time"
 	kcPathPartUsers              = "users"
 )
+
+var ErrTokenExpired = errors.New("token has expired")
+
+func IsTokenExpiredErr(err error) bool {
+	for err != nil {
+		if errors.Is(err, ErrTokenExpired) {
+			return true
+		}
+		err = errors.Unwrap(err)
+	}
+	return false
+}
 
 // DebugConfig
 //
@@ -211,7 +244,7 @@ func (c *APIClient) Do(ctx context.Context, req *APIRequest, mutators ...APIRequ
 }
 
 // Call is a helper method that wraps the creation of an *APIRequest type and executes it.
-func (c *APIClient) Call(ctx context.Context, ap AuthProvider, method, requestURL string, body interface{}, mutators ...APIRequestMutator) (*http.Response, error) {
+func (c *APIClient) Call(ctx context.Context, ap AuthenticationProvider, method, requestURL string, body interface{}, mutators ...APIRequestMutator) (*http.Response, error) {
 	var (
 		req *APIRequest
 		err error
@@ -227,7 +260,7 @@ func (c *APIClient) Call(ctx context.Context, ap AuthProvider, method, requestUR
 			am  []APIRequestMutator
 			err error
 		)
-		if am, err = ap.AuthMutators(ctx, c); err != nil {
+		if am, err = ap.RequestMutators(ctx, c); err != nil {
 			return nil, err
 		}
 		mutators = requestMutators(mutators, am...)
@@ -408,7 +441,7 @@ func (c *APIClient) keyFunc(ctx context.Context) jwt.Keyfunc {
 	}
 }
 
-func (c *APIClient) openIDConnectToken(ctx context.Context, realmName string, ap AuthProvider, req *OpenIDConnectTokenRequest, mutators ...APIRequestMutator) (interface{}, error) {
+func (c *APIClient) openIDConnectToken(ctx context.Context, realmName string, ap AuthenticationProvider, req *OpenIDConnectTokenRequest, mutators ...APIRequestMutator) (interface{}, error) {
 	var (
 		body  url.Values
 		resp  *http.Response
@@ -458,7 +491,7 @@ func (c *APIClient) realmsURL(realmName string, bits ...string) string {
 	return fmt.Sprintf(kcURLPathRealmsFormat, c.authServerURL, realmName, path.Join(bits...))
 }
 
-func (c *APIClient) callRealms(ctx context.Context, realmName string, ap AuthProvider, method, requestPath string, body interface{}, mutators ...APIRequestMutator) (*http.Response, error) {
+func (c *APIClient) callRealms(ctx context.Context, realmName string, ap AuthenticationProvider, method, requestPath string, body interface{}, mutators ...APIRequestMutator) (*http.Response, error) {
 	return c.Call(ctx, ap, method, c.realmsURL(realmName, requestPath), body, mutators...)
 }
 
@@ -466,10 +499,10 @@ func (c *APIClient) callRealms(ctx context.Context, realmName string, ap AuthPro
 type AdminAPIClient struct {
 	*APIClient
 	realmName string
-	ap        AuthProvider
+	ap        AuthenticationProvider
 }
 
-func NewAdminAPIClient(config *APIClientConfig, realmName string, ap AuthProvider, mutators ...ConfigMutator) (*AdminAPIClient, error) {
+func NewAdminAPIClient(config *APIClientConfig, realmName string, ap AuthenticationProvider, mutators ...ConfigMutator) (*AdminAPIClient, error) {
 	var (
 		c   *APIClient
 		err error
@@ -492,7 +525,7 @@ func NewAdminAPIClientWithProvider(cp CombinedProvider, realmName string, mutato
 
 func NewAdminAPIClientWithInstallDocument(id *InstallDocument, realmName string, mutators ...ConfigMutator) (*AdminAPIClient, error) {
 	// todo: support ID's for things other than a confidential client
-	ctp, err := NewConfidentialClientAuthProvider(&ConfidentialClientAuthProviderConfig{InstallDocument: id})
+	ctp, err := NewClientSecretAuthenticationProvider(NewClientSecretConfigWithInstallDocument(id))
 	if err != nil {
 		return nil, err
 	}
@@ -500,11 +533,11 @@ func NewAdminAPIClientWithInstallDocument(id *InstallDocument, realmName string,
 }
 
 // AdminClient returns a new AdminAPIClient for the provided realm (does not have to be the same as the auth'd realm)
-func (c *APIClient) AdminClient(realmName string, ap AuthProvider) *AdminAPIClient {
+func (c *APIClient) AdminClient(realmName string, ap AuthenticationProvider) *AdminAPIClient {
 	return &AdminAPIClient{APIClient: c, realmName: realmName, ap: ap}
 }
 
-func (c *AdminAPIClient) AuthProvider() AuthProvider {
+func (c *AdminAPIClient) AuthProvider() AuthenticationProvider {
 	return c.ap
 }
 

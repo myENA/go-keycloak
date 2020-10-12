@@ -70,11 +70,11 @@ package keycloak_test
 //	return configs
 //}
 //
-//func newClient(t *testing.T, testConfig *testConfig, mutators ...keycloak.ConfigMutator) (*keycloak.APIClient, keycloak.AuthProvider) {
+//func newClient(t *testing.T, testConfig *testConfig, mutators ...keycloak.ConfigMutator) (*keycloak.APIClient, keycloak.AuthenticationProvider) {
 //	t.Helper()
 //	var (
 //		cl  *keycloak.APIClient
-//		ap  keycloak.AuthProvider
+//		ap  keycloak.AuthenticationProvider
 //		err error
 //	)
 //
@@ -102,9 +102,9 @@ package keycloak_test
 //
 //	if testConfig.ClientConfig.Cred != nil {
 //		if testConfig.ClientConfig.Cred.BearerToken != "" {
-//			ap = keycloak.NewBearerTokenAuthProvider(testConfig.ClientConfig.Cred.BearerToken)
+//			ap = keycloak.NewBearerTokenProvider(testConfig.ClientConfig.Cred.BearerToken)
 //		} else if testConfig.ClientConfig.Cred.InstallDocument != nil {
-//			ap, err = keycloak.NewConfidentialClientAuthProvider(&keycloak.ConfidentialClientAuthProviderConfig{
+//			ap, err = keycloak.NewClientSecretAuthenticationProvider(&keycloak.ClientSecretProviderConfig{
 //				InstallDocument: testConfig.ClientConfig.Cred.InstallDocument,
 //			})
 //		} else {

@@ -24,7 +24,7 @@ func (c *APIClient) TokenService() *TokenService {
 // ClientEntitlement will attempt to call the pre-uma2 entitlement endpoint to return a Requesting Party Token
 // containing details about what aspects of the provided clientID the token for this request has access to, if any.
 // DEPRECATED: use the newer token workflow for instances newer than 3.4
-func (ts *TokenService) ClientEntitlement(ctx context.Context, realmName string, ap AuthProvider, clientID string, claimsType jwt.Claims, parserOpts []jwt.ParserOption, mutators ...APIRequestMutator) (*jwt.Token, error) {
+func (ts *TokenService) ClientEntitlement(ctx context.Context, realmName string, ap AuthenticationProvider, clientID string, claimsType jwt.Claims, parserOpts []jwt.ParserOption, mutators ...APIRequestMutator) (*jwt.Token, error) {
 	var (
 		resp *http.Response
 		env  *RealmEnvironment
@@ -59,7 +59,7 @@ func (ts *TokenService) ClientEntitlement(ctx context.Context, realmName string,
 }
 
 // PermissionEvaluation will return an array of permissions granted by the server
-func (ts *TokenService) PermissionEvaluation(ctx context.Context, realmName string, ap AuthProvider, req *OpenIDConnectTokenRequest, mutators ...APIRequestMutator) (EvaluatedPermissions, error) {
+func (ts *TokenService) PermissionEvaluation(ctx context.Context, realmName string, ap AuthenticationProvider, req *OpenIDConnectTokenRequest, mutators ...APIRequestMutator) (EvaluatedPermissions, error) {
 	var (
 		body  url.Values
 		resp  *http.Response
@@ -96,7 +96,7 @@ func (ts *TokenService) PermissionEvaluation(ctx context.Context, realmName stri
 }
 
 // PermissionDecision can be used to determine whether a bearer token is allowed the permission requested
-func (ts *TokenService) PermissionDecision(ctx context.Context, realmName string, ap AuthProvider, req *OpenIDConnectTokenRequest, mutators ...APIRequestMutator) (*PermissionDecisionResponse, error) {
+func (ts *TokenService) PermissionDecision(ctx context.Context, realmName string, ap AuthenticationProvider, req *OpenIDConnectTokenRequest, mutators ...APIRequestMutator) (*PermissionDecisionResponse, error) {
 	var (
 		res  interface{}
 		resT *PermissionDecisionResponse
@@ -118,7 +118,7 @@ func (ts *TokenService) PermissionDecision(ctx context.Context, realmName string
 	return resT, nil
 }
 
-func (ts *TokenService) OpenIDConnectToken(ctx context.Context, realmName string, ap AuthProvider, req *OpenIDConnectTokenRequest, mutators ...APIRequestMutator) (*OpenIDConnectToken, error) {
+func (ts *TokenService) OpenIDConnectToken(ctx context.Context, realmName string, ap AuthenticationProvider, req *OpenIDConnectTokenRequest, mutators ...APIRequestMutator) (*OpenIDConnectToken, error) {
 	var (
 		res   interface{}
 		token *OpenIDConnectToken
@@ -136,7 +136,7 @@ func (ts *TokenService) OpenIDConnectToken(ctx context.Context, realmName string
 }
 
 // RequestingPartyToken will attempt to automatically decode and validate a RPT returned from an OIDC token request
-func (ts *TokenService) RequestingPartyToken(ctx context.Context, realmName string, ap AuthProvider, req *OpenIDConnectTokenRequest, claimsType jwt.Claims, parserOpts []jwt.ParserOption, mutators ...APIRequestMutator) (*jwt.Token, error) {
+func (ts *TokenService) RequestingPartyToken(ctx context.Context, realmName string, ap AuthenticationProvider, req *OpenIDConnectTokenRequest, claimsType jwt.Claims, parserOpts []jwt.ParserOption, mutators ...APIRequestMutator) (*jwt.Token, error) {
 	req.ResponseMode = nil
 	resp, err := ts.OpenIDConnectToken(ctx, realmName, ap, req, mutators...)
 	if err != nil {
@@ -145,7 +145,7 @@ func (ts *TokenService) RequestingPartyToken(ctx context.Context, realmName stri
 	return ts.c.ParseToken(ctx, resp.AccessToken, claimsType, parserOpts...)
 }
 
-func (ts *TokenService) IntrospectRequestingPartyToken(ctx context.Context, realmName string, ap AuthProvider, rawRPT string, mutators ...APIRequestMutator) (*TokenIntrospectionResults, error) {
+func (ts *TokenService) IntrospectRequestingPartyToken(ctx context.Context, realmName string, ap AuthenticationProvider, rawRPT string, mutators ...APIRequestMutator) (*TokenIntrospectionResults, error) {
 	var (
 		body    url.Values
 		resp    *http.Response

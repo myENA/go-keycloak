@@ -10,23 +10,6 @@ import (
 	"time"
 )
 
-const (
-	// DefaultTokenExpirationMargin will be used if you do not specify your own ExpiryMargin key in the config
-	DefaultTokenExpirationMargin = 2 * time.Second
-)
-
-var ErrTokenExpired = errors.New("token has expired")
-
-func IsTokenExpiredErr(err error) bool {
-	for err != nil {
-		if errors.Is(err, ErrTokenExpired) {
-			return true
-		}
-		err = errors.Unwrap(err)
-	}
-	return false
-}
-
 // AuthServerURLProvider defines a single-user provider that is called once during client initialization, and is
 // expected to return the full address and any path prefix for the target keycloak server.
 //
@@ -38,98 +21,102 @@ type AuthServerURLProvider interface {
 	AuthServerURL() (string, error)
 }
 
-type staticAuthServerURLProvider string
+type StaticAuthServerURL string
 
-func (ip staticAuthServerURLProvider) AuthServerURL() (string, error) {
+func (ip StaticAuthServerURL) AuthServerURL() (string, error) {
 	return string(ip), nil
 }
 
 // NewAuthServerURLProvider builds an AuthServerURLProvider that will set the issuer address value provided to this constructor,
 // unless the context provided to the setter already contains an an issuer address key
-func NewAuthServerURLProvider(authServerURL string) AuthServerURLProvider {
-	return staticAuthServerURLProvider(authServerURL)
+func NewAuthServerURLProvider(authServerURL string) StaticAuthServerURL {
+	return StaticAuthServerURL(authServerURL)
 }
 
-// NewAuthServerURLProviderWithURL will construct a new staticAuthServerURLProvider using the provided *url.URL
-func NewAuthServerURLProviderWithURL(purl *url.URL) AuthServerURLProvider {
+// NewAuthServerURLProviderWithURL will construct a new StaticAuthServerURL using the provided *url.URL
+func NewAuthServerURLProviderWithURL(purl *url.URL) StaticAuthServerURL {
 	if purl == nil {
 		panic("why did you pass me a nil *url.URL...")
 	}
 	return NewAuthServerURLProvider(purl.String())
 }
 
-func defaultAuthServerURLProvider() AuthServerURLProvider {
+func defaultAuthServerURLProvider() StaticAuthServerURL {
 	return NewAuthServerURLProvider("http://127.0.0.1/auth")
 }
 
-type AuthProvider interface {
-	AuthMutators(context.Context, *APIClient) ([]APIRequestMutator, error)
+type AuthenticationProvider interface {
+	// RequestMutators must return the list of mutators necessary to decorate a request with a usable credential or fail
+	// with an error
+	RequestMutators(context.Context, *APIClient) ([]APIRequestMutator, error)
 }
 
-type BearerTokenAuthProvider struct {
-	bearerToken string
+type BearerTokenProvider string
+
+// NewBearerTokenProvider returns a AuthenticationProvider implementation that returns a fixed token value.
+func NewBearerTokenProvider(bearerToken string) BearerTokenProvider {
+	return BearerTokenProvider(bearerToken)
 }
 
-// NewBearerTokenAuthProvider returns a token provider implementation that returns a fixed token value.
-func NewBearerTokenAuthProvider(bearerToken string) BearerTokenAuthProvider {
-	bt := BearerTokenAuthProvider{
-		bearerToken: bearerToken,
-	}
-	return bt
-}
-
-func NewBearerTokenAuthProviderFromRequest(request *http.Request) (BearerTokenAuthProvider, error) {
+func NewBearerTokenProviderFromRequest(request *http.Request) (BearerTokenProvider, error) {
 	var (
 		bt string
 		ok bool
 	)
 	if bt, ok = RequestBearerToken(request); ok {
-		return NewBearerTokenAuthProvider(bt), nil
+		return NewBearerTokenProvider(bt), nil
 	}
-	return BearerTokenAuthProvider{}, errors.New("missing bearer token in request")
+	return "", errors.New("missing bearer token in request")
 }
 
-func (p BearerTokenAuthProvider) AuthMutators(_ context.Context, _ *APIClient) ([]APIRequestMutator, error) {
-	return []APIRequestMutator{BearerAuthRequestMutator(p.bearerToken)}, nil
+func (p BearerTokenProvider) RequestMutators(_ context.Context, _ *APIClient) ([]APIRequestMutator, error) {
+	return []APIRequestMutator{BearerAuthRequestMutator(string(p))}, nil
 }
 
-// CombinedProvider describes any provider that can fulfill auth url, realm, and renewable bearer token roles
+// CombinedProvider describes any provider that can fulfill auth url and auth provider roles
 type CombinedProvider interface {
 	AuthServerURLProvider
-	AuthProvider
+	AuthenticationProvider
 }
 
-// ConfidentialClientAuthProviderConfig must be provided to a new ConfidentialClientAuthProvider upon construction
-type ConfidentialClientAuthProviderConfig struct {
-	// InstallDocument [optional]
-	//
-	// If you already have a confidential client install document handy, you may pass it in here.
-	InstallDocument *InstallDocument `json:"id"`
-
-	// ExpiryMargin [optional]
-	//
-	// The margin of safety prior to the actual deadline of the internal token to go ahead and execute a refresh
+// ClientSecretProviderConfig must be provided to a new ClientSecretProvider upon construction
+type ClientSecretProviderConfig struct {
+	// AuthServerURL [required] - Full domain and any path prefix to Keycloak server
+	AuthServerURL string `json:"authServerURL"`
+	// Realm [required] - Name of realm within Keycloak that contains this client
+	Realm string `json:"realm"`
+	// Resource [required] - client id of client (not uuid id)
+	Resource string `json:"resource"`
+	// Secret [required] - Authentication secret of client
+	Secret string `json:"secret"`
+	// ExpiryMargin [optional] - Margin of time before absolute expiration to execute a refresh
 	ExpiryMargin time.Duration `json:"expiryMargin"`
 }
 
-// ConfidentialClientAuthProvider
+func NewClientSecretConfigWithInstallDocument(id *InstallDocument) ClientSecretProviderConfig {
+	return ClientSecretProviderConfig{
+		AuthServerURL: id.AuthServerURL,
+		Realm:         id.Realm,
+		Resource:      id.Resource,
+		Secret:        id.Credentials["secret"],
+	}
+}
+
+// ClientSecretProvider
 //
-// This provider implements the TokenProviderClientAware interface, and is designed to take care of the complexity of
-// managing a confidential client token for you.
+// This provider implements the CombinedProvider interface, and is designed to take care of the complexity of managing a
+// confidential client token for you.
 //
 // Easiest way to implement would be the following:
 //
-//	conf := keycloak.ConfidentialClientAuthProviderConfig {
-//		InstallDocument: {id document}
-//	}
-//  ctx, cancel := context.WithTimeout(context.Background(), 2 * time.Second)
-//  defer cancel()
-//  tokenClient, err := NewTokenAPIClientForConfidentialClient(ctx, nil, conf)
+//	conf := keycloak.NewClientSecretConfigWithInstallDocument({install document})
+//  prov, err := NewClientSecretAuthenticationProvider(conf)
 //  if err != nil {
 // 		panic(err.Error())
 //	}
-type ConfidentialClientAuthProvider struct {
-	staticAuthServerURLProvider
+type ClientSecretProvider struct {
+	AuthServerURLProvider
+
 	mu sync.RWMutex
 
 	realmName      string
@@ -141,30 +128,25 @@ type ConfidentialClientAuthProvider struct {
 	tokenExpiry    int64
 }
 
-// NewConfidentialClientAuthProvider will attempt to construct a new ConfidentialClientAuthProvider for you based on
+// NewClientSecretAuthenticationProvider will attempt to construct a new ClientSecretProvider for you based on
 // the provided configuration.
-func NewConfidentialClientAuthProvider(conf *ConfidentialClientAuthProviderConfig) (*ConfidentialClientAuthProvider, error) {
+func NewClientSecretAuthenticationProvider(conf ClientSecretProviderConfig) (*ClientSecretProvider, error) {
 	var (
-		secret string
-		id     *InstallDocument
-		ok     bool
-
 		expiryMargin = DefaultTokenExpirationMargin
-		tp           = new(ConfidentialClientAuthProvider)
+		tp           = new(ClientSecretProvider)
 	)
 
-	if conf.InstallDocument == nil {
-		return nil, errors.New("InstallDocument must be defined")
+	if conf.AuthServerURL == "" {
+		return nil, errors.New("conf.AuthServerURL is required")
 	}
-
-	id = conf.InstallDocument
-
-	// validate doc
-	if len(id.Credentials) == 0 {
-		return nil, errors.New("install document Credentials field is empty")
+	if conf.Realm == "" {
+		return nil, errors.New("conf.Realm is required")
 	}
-	if secret, ok = id.Credentials["secret"]; !ok {
-		return nil, errors.New("install document Credentials field is missing key \"secret\"")
+	if conf.Resource == "" {
+		return nil, errors.New("conf.Resource is required")
+	}
+	if conf.Secret == "" {
+		return nil, errors.New("conf.Secret is required")
 	}
 
 	// did they override default expiry margin?
@@ -172,71 +154,39 @@ func NewConfidentialClientAuthProvider(conf *ConfidentialClientAuthProviderConfi
 		expiryMargin = conf.ExpiryMargin
 	}
 
-	tp.staticAuthServerURLProvider = NewAuthServerURLProvider(id.AuthServerURL).(staticAuthServerURLProvider)
-
-	tp.realmName = id.Realm
-	tp.clientID = id.Resource
-	tp.clientSecret = secret
+	tp.AuthServerURLProvider = NewAuthServerURLProvider(conf.AuthServerURL)
+	tp.realmName = conf.Realm
+	tp.clientID = conf.Resource
+	tp.clientSecret = conf.Secret
 	tp.expiryMargin = expiryMargin
 
 	return tp, nil
 }
 
-func (tp *ConfidentialClientAuthProvider) RealmName() (string, error) {
-	return tp.realmName, nil
+func (p *ClientSecretProvider) Realm() (string, error) {
+	return p.realmName, nil
 }
 
-func (tp *ConfidentialClientAuthProvider) ClientID() string {
-	return tp.clientID
+func (p *ClientSecretProvider) ClientID() string {
+	return p.clientID
 }
 
-// LastRefreshed returns a unix nano timestamp of the last time this client's bearer token was refreshed.
-func (tp *ConfidentialClientAuthProvider) LastRefreshed() int64 {
-	tp.mu.RLock()
-	defer tp.mu.RUnlock()
-	lr := tp.tokenRefreshed
-	return lr
-}
-
-// Expiry returns a unix nano timestamp of when the current token, if defined, expires.
-func (tp *ConfidentialClientAuthProvider) Expiry() int64 {
-	tp.mu.RLock()
-	defer tp.mu.RUnlock()
-	e := tp.tokenExpiry
-	return e
-}
-
-func (tp *ConfidentialClientAuthProvider) expired() bool {
-	if tp.token == nil {
-		return true
-	}
-	return time.Now().After(time.Unix(0, tp.tokenExpiry))
-}
-
-// Expired will return true if the currently stored token has expired
-func (tp *ConfidentialClientAuthProvider) Expired() bool {
-	tp.mu.Lock()
-	defer tp.mu.Unlock()
-	return tp.expired()
-}
-
-// AuthMutators handles token refresh and builds a list of mutators to be applied to an outgoing authenticated request
-func (tp *ConfidentialClientAuthProvider) AuthMutators(ctx context.Context, client *APIClient) ([]APIRequestMutator, error) {
-	tp.mu.RLock()
+func (p *ClientSecretProvider) Current(ctx context.Context, client *APIClient) (OpenIDConnectToken, error) {
+	p.mu.RLock()
 
 	// check if there is anything to actually do.
-	if !tp.expired() {
-		defer tp.mu.RUnlock()
-		return []APIRequestMutator{BearerAuthRequestMutator(tp.token.AccessToken)}, nil
+	if !p.expired() {
+		defer p.mu.RUnlock()
+		return *p.token, nil
 	}
 
-	tp.mu.RUnlock()
-	tp.mu.Lock()
-	defer tp.mu.Unlock()
+	p.mu.RUnlock()
+	p.mu.Lock()
+	defer p.mu.Unlock()
 
 	// test to ensure that another routine did not grab the lock and already refresh the token.
-	if !tp.expired() {
-		return []APIRequestMutator{BearerAuthRequestMutator(tp.token.AccessToken)}, nil
+	if !p.expired() {
+		return *p.token, nil
 	}
 
 	var (
@@ -247,17 +197,53 @@ func (tp *ConfidentialClientAuthProvider) AuthMutators(ctx context.Context, clie
 	)
 
 	// attempt to fetch a new openid token for our confidential client
-	req.ClientID = tp.clientID
-	req.ClientSecret = tp.clientSecret
+	req.ClientID = p.clientID
+	req.ClientSecret = p.clientSecret
 
 	// fetch new oidc token
-	if oidc, err = client.Login(ctx, req, tp.realmName); err != nil {
-		return nil, fmt.Errorf("unable to fetch OpenIDConnectToken: %w", err)
+	if oidc, err = client.Login(ctx, req, p.realmName); err != nil {
+		return OpenIDConnectToken{}, fmt.Errorf("unable to fetch OpenIDConnectToken: %w", err)
 	}
 
 	// update client with new token
-	tp.token = oidc
-	tp.tokenRefreshed = time.Now().UnixNano()
-	tp.tokenExpiry = time.Now().Add((time.Duration(oidc.ExpiresIn) * time.Second) - tp.expiryMargin).UnixNano()
-	return []APIRequestMutator{BearerAuthRequestMutator(tp.token.AccessToken)}, nil
+	p.token = oidc
+	p.tokenRefreshed = time.Now().UnixNano()
+	p.tokenExpiry = time.Now().Add((time.Duration(oidc.ExpiresIn) * time.Second) - p.expiryMargin).UnixNano()
+	return *p.token, nil
+}
+
+// LastRefreshed returns a unix nano timestamp of the last time this client's bearer token was refreshed.
+func (p *ClientSecretProvider) LastRefreshed() int64 {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	lr := p.tokenRefreshed
+	return lr
+}
+
+// Expiry returns a unix nano timestamp of when the current token, if defined, expires.
+func (p *ClientSecretProvider) Expiry() int64 {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	e := p.tokenExpiry
+	return e
+}
+
+func (p *ClientSecretProvider) expired() bool {
+	return p.token == nil || time.Now().After(time.Unix(0, p.tokenExpiry))
+}
+
+// Expired will return true if the currently stored token has expired
+func (p *ClientSecretProvider) Expired() bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.expired()
+}
+
+// AuthMutators handles token refresh and builds a list of mutators to be applied to an outgoing authenticated request
+func (p *ClientSecretProvider) RequestMutators(ctx context.Context, client *APIClient) ([]APIRequestMutator, error) {
+	if token, err := p.Current(ctx, client); err != nil {
+		return nil, err
+	} else {
+		return []APIRequestMutator{BearerAuthRequestMutator(token.AccessToken)}, nil
+	}
 }

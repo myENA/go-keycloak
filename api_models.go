@@ -7,22 +7,6 @@ import (
 	"time"
 )
 
-const (
-	DecisionStrategyUnanimous   = "UNANIMOUS"
-	DecisionStrategyAffirmative = "AFFIRMATIVE"
-	DecisionStrategyPositive    = "POSITIVE"
-
-	PermissionTypeResource = "resource"
-	PermissionTypeRole     = "role"
-
-	PolicyTypeRole       = "role"
-	PolicyTypeJavascript = "js"
-	PolicyTypeTime       = "time"
-
-	LogicPositive = "POSITIVE"
-	LogicNegative = "NEGATIVE"
-)
-
 type KeyValueMap map[string]string
 type KeyValuesMap map[string][]string
 
