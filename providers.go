@@ -124,8 +124,8 @@ type ClientSecretProvider struct {
 	clientSecret   string
 	expiryMargin   time.Duration
 	token          *OpenIDConnectToken
-	tokenRefreshed int64
-	tokenExpiry    int64
+	tokenRefreshed time.Time
+	tokenExpiry    time.Time
 }
 
 // NewClientSecretAuthenticationProvider will attempt to construct a new ClientSecretProvider for you based on
@@ -206,9 +206,10 @@ func (p *ClientSecretProvider) Current(ctx context.Context, client *APIClient) (
 	}
 
 	// update client with new token
+	now := time.Now()
 	p.token = oidc
-	p.tokenRefreshed = time.Now().UnixNano()
-	p.tokenExpiry = time.Now().Add((time.Duration(oidc.ExpiresIn) * time.Second) - p.expiryMargin).UnixNano()
+	p.tokenRefreshed = now
+	p.tokenExpiry = now.Add((time.Duration(oidc.ExpiresIn) * time.Second) - p.expiryMargin)
 	return *p.token, nil
 }
 
@@ -217,7 +218,7 @@ func (p *ClientSecretProvider) LastRefreshed() int64 {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 	lr := p.tokenRefreshed
-	return lr
+	return lr.Unix()
 }
 
 // Expiry returns a unix nano timestamp of when the current token, if defined, expires.
@@ -225,11 +226,11 @@ func (p *ClientSecretProvider) Expiry() int64 {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 	e := p.tokenExpiry
-	return e
+	return e.Unix()
 }
 
 func (p *ClientSecretProvider) expired() bool {
-	return p.token == nil || time.Now().After(time.Unix(0, p.tokenExpiry))
+	return p.token == nil || time.Now().After(p.tokenExpiry)
 }
 
 // Expired will return true if the currently stored token has expired
