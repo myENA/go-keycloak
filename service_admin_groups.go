@@ -17,8 +17,6 @@ func (c *AdminAPIClient) GroupsService() *AdminGroupsService {
 	return gs
 }
 
-// List attempts to return to you a list of all the  groups within the Realm this client was created
-// with
 func (gs *AdminGroupsService) List(ctx context.Context, search string, first, max int, mutators ...APIRequestMutator) (Groups, error) {
 	var (
 		resp *http.Response
@@ -45,7 +43,6 @@ func (gs *AdminGroupsService) List(ctx context.Context, search string, first, ma
 	return groups, nil
 }
 
-// Count attempts to return a count of the total number of groups present in
 func (gs *AdminGroupsService) Count(ctx context.Context, search string, top bool, mutators ...APIRequestMutator) (int, error) {
 	var (
 		resp *http.Response
@@ -73,7 +70,6 @@ func (gs *AdminGroupsService) Count(ctx context.Context, search string, top bool
 	return model.Count, nil
 }
 
-// Get attempts to retrieve details of a specific  group within the realm this client was created with
 func (gs *AdminGroupsService) Get(ctx context.Context, groupID string, mutators ...APIRequestMutator) (*Group, error) {
 	var (
 		resp *http.Response
@@ -97,8 +93,6 @@ func (gs *AdminGroupsService) Get(ctx context.Context, groupID string, mutators 
 	return group, nil
 }
 
-// Members attempts to return to you a list of all the  Users present in the  group
-// specified within the realm this client was created with
 func (gs *AdminGroupsService) Members(ctx context.Context, groupID string, mutators ...APIRequestMutator) (Users, error) {
 	var (
 		resp *http.Response
@@ -122,26 +116,32 @@ func (gs *AdminGroupsService) Members(ctx context.Context, groupID string, mutat
 	return members, nil
 }
 
-// Create attempts to push a new group into , returning to you the InstallDocument of the newly created group.
-func (gs *AdminGroupsService) Create(ctx context.Context, group GroupCreate, mutators ...APIRequestMutator) ([]string, error) {
+func (gs *AdminGroupsService) Create(ctx context.Context, body GroupCreate, mutators ...APIRequestMutator) ([]string, error) {
 	var (
 		resp *http.Response
 		err  error
 	)
-	resp, err = gs.c.callAdminRealms(ctx, http.MethodPost, kcPathPartClients, group, mutators...)
-	if err = handleResponse(resp, http.StatusOK, nil, err); err != nil {
+	resp, err = gs.c.callAdminRealms(
+		ctx,
+		http.MethodPost,
+		kcPathPartGroups,
+		body,
+		requestMutators(
+			mutators,
+			HeaderMutator(httpHeaderContentType, httpHeaderValueJSON, true),
+		)...,
+	)
+	if err = handleResponse(resp, http.StatusCreated, nil, err); err != nil {
 		return nil, err
 	}
 	return parseResponseLocations(resp)
 }
 
-// Delete attempts to delete a group from
 func (gs *AdminGroupsService) Delete(ctx context.Context, groupID string, mutators ...APIRequestMutator) error {
 	resp, err := gs.c.callAdminRealms(ctx, http.MethodDelete, path.Join(kcPathPartGroups, groupID), nil, mutators...)
 	return handleResponse(resp, http.StatusOK, nil, err)
 }
 
-// Update attempts to push updated values for a specific group to
 func (gs *AdminGroupsService) Update(ctx context.Context, groupID string, group Group, mutators ...APIRequestMutator) error {
 	resp, err := gs.c.callAdminRealms(
 		ctx,
@@ -155,4 +155,25 @@ func (gs *AdminGroupsService) Update(ctx context.Context, groupID string, group 
 		)...,
 	)
 	return handleResponse(resp, http.StatusOK, nil, err)
+}
+
+func (gs *AdminGroupsService) CreateChild(ctx context.Context, parentGroupID string, body GroupCreate, mutators ...APIRequestMutator) ([]string, error) {
+	var (
+		resp *http.Response
+		err  error
+	)
+	resp, err = gs.c.callAdminRealms(
+		ctx,
+		http.MethodPost,
+		path.Join(kcPathPartGroups, parentGroupID, kcPathPartChildren),
+		body,
+		requestMutators(
+			mutators,
+			HeaderMutator(httpHeaderContentType, httpHeaderValueJSON, true),
+		)...,
+	)
+	if err = handleResponse(resp, http.StatusCreated, nil, err); err != nil {
+		return nil, err
+	}
+	return parseResponseLocations(resp)
 }

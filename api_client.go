@@ -85,6 +85,7 @@ const (
 	kcPathPartAssociatedPolicies = "associatedPolicies"
 	kcPathPartAuthz              = "authz"
 	kcPathPartAvailable          = "available"
+	kcPathPartChildren           = "children"
 	kcPathPartClients            = "clients"
 	kcPathPartClientScopes       = "client-scopes"
 	kcPathPartComposites         = "composites"
