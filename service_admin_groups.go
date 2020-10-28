@@ -2,6 +2,7 @@ package keycloak
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"path"
 	"strconv"
@@ -135,6 +136,20 @@ func (gs *AdminGroupsService) Create(ctx context.Context, body GroupCreate, muta
 		return nil, err
 	}
 	return parseResponseLocations(resp)
+}
+
+func (gs *AdminGroupsService) CreateAndGet(ctx context.Context, body GroupCreate, mutators ...APIRequestMutator) (*Group, error) {
+	var (
+		ids []string
+		err error
+	)
+	if ids, err = gs.Create(ctx, body, mutators...); err != nil {
+		return nil, err
+	}
+	if len(ids) != 1 {
+		return nil, fmt.Errorf("expected 1 id in response, found %v", ids)
+	}
+	return gs.Get(ctx, ids[0], mutators...)
 }
 
 func (gs *AdminGroupsService) Delete(ctx context.Context, groupID string, mutators ...APIRequestMutator) error {
