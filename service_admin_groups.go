@@ -192,3 +192,17 @@ func (gs *AdminGroupsService) CreateChild(ctx context.Context, parentGroupID str
 	}
 	return parseResponseLocations(resp)
 }
+
+func (gs *AdminGroupsService) CreateAndGetChild(ctx context.Context, parentGroupID string, body GroupCreate, mutators ...APIRequestMutator) (*Group, error) {
+	var (
+		ids []string
+		err error
+	)
+	if ids, err = gs.CreateChild(ctx, parentGroupID, body, mutators...); err != nil {
+		return nil, err
+	}
+	if len(ids) != 1 {
+		return nil, fmt.Errorf("expected 1 id in response, found %v", ids)
+	}
+	return gs.Get(ctx, ids[0], mutators...)
+}
