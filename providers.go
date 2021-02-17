@@ -119,13 +119,14 @@ type ClientSecretProvider struct {
 
 	mu sync.RWMutex
 
-	realmName      string
-	clientID       string
-	clientSecret   string
-	expiryMargin   time.Duration
-	token          *OpenIDConnectToken
-	tokenRefreshed time.Time
-	tokenExpiry    time.Time
+	realmName          string
+	clientID           string
+	clientSecret       string
+	expiryMargin       time.Duration
+	token              *OpenIDConnectToken
+	tokenRefreshed     time.Time
+	tokenExpiry        time.Time
+	tokenRefreshExpiry time.Time
 }
 
 // NewClientSecretAuthenticationProvider will attempt to construct a new ClientSecretProvider for you based on
@@ -200,6 +201,12 @@ func (p *ClientSecretProvider) Current(ctx context.Context, client *APIClient) (
 	req.ClientID = p.clientID
 	req.ClientSecret = p.clientSecret
 
+	// if the refresh token is not expired perform a call with grant_type=refresh_token
+	if p.token != nil && time.Now().Before(p.tokenRefreshExpiry) {
+		req.GrantType = GrantTypeRefreshToken
+		req.RefreshToken = p.token.RefreshToken
+	}
+
 	// fetch new oidc token
 	if oidc, err = client.Login(ctx, req, p.realmName); err != nil {
 		return OpenIDConnectToken{}, fmt.Errorf("unable to fetch OpenIDConnectToken: %w", err)
@@ -210,6 +217,7 @@ func (p *ClientSecretProvider) Current(ctx context.Context, client *APIClient) (
 	p.token = oidc
 	p.tokenRefreshed = now
 	p.tokenExpiry = now.Add((time.Duration(oidc.ExpiresIn) * time.Second) - p.expiryMargin)
+	p.tokenRefreshExpiry = now.Add((time.Duration(oidc.RefreshExpiresIn) * time.Second) - p.expiryMargin)
 	return *p.token, nil
 }
 

@@ -22,6 +22,7 @@ const (
 	GrantTypeCode              = "code"
 	GrantTypeUMA2Ticket        = "urn:ietf:params:oauth:grant-type:uma-ticket"
 	GrantTypeClientCredentials = "client_credentials"
+	GrantTypeRefreshToken      = "refresh_token"
 
 	// token type hint values
 	TokenTypeHintRequestingPartyToken = "requesting_party_token"
