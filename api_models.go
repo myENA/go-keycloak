@@ -283,6 +283,9 @@ type OpenIDConnectTokenRequest struct {
 	// ClientSecret [required - grant_type=client_credentials]
 	ClientSecret string `json:"client_secret,omitempty" url:"client_secret,omitempty"`
 
+	// RefreshToken [required - grant_type=refresh_token] - The value is a valid refresh token that was generated previously
+	RefreshToken string `json:"refresh_token,omitempty" url:"refresh_token,omitempty"`
+
 	// Audience [optional] - Specific client to request permission for
 	Audience string `json:"audience,omitempty" url:"audience,omitempty"`
 
