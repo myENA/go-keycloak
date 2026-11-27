@@ -154,7 +154,7 @@ func (gs *AdminGroupsService) CreateAndGet(ctx context.Context, body GroupCreate
 
 func (gs *AdminGroupsService) Delete(ctx context.Context, groupID string, mutators ...APIRequestMutator) error {
 	resp, err := gs.c.callAdminRealms(ctx, http.MethodDelete, path.Join(kcPathPartGroups, groupID), nil, mutators...)
-	return handleResponse(resp, http.StatusOK, nil, err)
+	return handleResponse(resp, http.StatusNoContent, nil, err)
 }
 
 func (gs *AdminGroupsService) Update(ctx context.Context, groupID string, group Group, mutators ...APIRequestMutator) error {
@@ -169,7 +169,7 @@ func (gs *AdminGroupsService) Update(ctx context.Context, groupID string, group 
 			HeaderMutator(httpHeaderContentType, httpHeaderValueJSON, true),
 		)...,
 	)
-	return handleResponse(resp, http.StatusOK, nil, err)
+	return handleResponse(resp, http.StatusNoContent, nil, err)
 }
 
 func (gs *AdminGroupsService) CreateChild(ctx context.Context, parentGroupID string, body GroupCreate, mutators ...APIRequestMutator) ([]string, error) {

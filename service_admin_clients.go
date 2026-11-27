@@ -559,7 +559,7 @@ func (cas *AdminClientAuthzService) PolicyUpdate(ctx context.Context, body *Poli
 			HeaderMutator(httpHeaderContentType, httpHeaderValueJSON, true),
 		)...,
 	)
-	return handleResponse(resp, http.StatusCreated, nil, err)
+	return handleResponse(resp, http.StatusNoContent, nil, err)
 }
 
 func (cas *AdminClientAuthzService) PolicyDelete(ctx context.Context, policyID string, mutators ...APIRequestMutator) error {
@@ -668,7 +668,7 @@ func (cas *AdminClientAuthzService) PermissionUpdate(ctx context.Context, body *
 			HeaderMutator(httpHeaderContentType, httpHeaderValueJSON, true),
 		)...,
 	)
-	return handleResponse(resp, http.StatusCreated, nil, err)
+	return handleResponse(resp, http.StatusNoContent, nil, err)
 }
 
 func (cas *AdminClientAuthzService) PermissionDelete(ctx context.Context, permissionID string, mutators ...APIRequestMutator) error {

@@ -99,7 +99,7 @@ func (us *AdminUsersService) Create(ctx context.Context, user *UserCreate, mutat
 			HeaderMutator(httpHeaderContentType, httpHeaderValueJSON, true),
 		)...,
 	)
-	if err = handleResponse(resp, http.StatusOK, nil, err); err != nil {
+	if err = handleResponse(resp, http.StatusCreated, nil, err); err != nil {
 		return nil, err
 	}
 	return parseResponseLocations(resp)
@@ -118,13 +118,13 @@ func (us *AdminUsersService) Update(ctx context.Context, userID string, user *Us
 			HeaderMutator(httpHeaderContentType, httpHeaderValueJSON, true),
 		)...,
 	)
-	return handleResponse(resp, http.StatusOK, nil, err)
+	return handleResponse(resp, http.StatusNoContent, nil, err)
 }
 
 // Delete attempts to delete a user from the keycloak realm
 func (us *AdminUsersService) Delete(ctx context.Context, userID string, mutators ...APIRequestMutator) error {
 	resp, err := us.c.callAdminRealms(ctx, http.MethodDelete, path.Join(kcPathPartUsers, userID), nil, mutators...)
-	return handleResponse(resp, http.StatusOK, nil, err)
+	return handleResponse(resp, http.StatusNoContent, nil, err)
 }
 
 type AdminUserGroupsService struct {
@@ -170,13 +170,13 @@ func (gs *AdminUserGroupsService) List(ctx context.Context, mutators ...APIReque
 // Add attempts to add the service user to the specified group
 func (gs *AdminUserGroupsService) Add(ctx context.Context, groupID string, mutators ...APIRequestMutator) error {
 	resp, err := gs.c.callAdminRealms(ctx, http.MethodPut, path.Join(kcPathPartUsers, gs.userID, kcPathPartGroups, groupID), nil, mutators...)
-	return handleResponse(resp, http.StatusOK, nil, err)
+	return handleResponse(resp, http.StatusNoContent, nil, err)
 }
 
 // Remove attempts to remove the service user from the specified group
 func (gs *AdminUserGroupsService) Remove(ctx context.Context, groupID string, mutators ...APIRequestMutator) error {
 	resp, err := gs.c.callAdminRealms(ctx, http.MethodDelete, path.Join(kcPathPartUsers, gs.userID, kcPathPartGroups, groupID), nil, mutators...)
-	return handleResponse(resp, http.StatusOK, nil, err)
+	return handleResponse(resp, http.StatusNoContent, nil, err)
 }
 
 type AdminUserRoleMappingsService struct {
