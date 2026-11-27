@@ -2,6 +2,7 @@ package keycloak
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"path"
 )
@@ -88,6 +89,14 @@ func (cs *AdminClientsService) Create(ctx context.Context, body *ClientCreateReq
 	if err = handleResponse(resp, http.StatusCreated, nil, err); err != nil {
 		return nil, err
 	}
+	ids, err := parseResponseLocations(resp)
+	if err != nil {
+		return nil, err
+	}
+	if len(ids) != 1 {
+		return nil, fmt.Errorf("expected 1 id in response, found %v", ids)
+	}
+	client.ID = ids[0]
 	return client, nil
 }
 

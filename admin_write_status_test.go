@@ -29,7 +29,7 @@ func TestAdminWritesAcceptKeycloakStatus(t *testing.T) {
 			pathSuffix: "/users",
 			location:   userLocation,
 			ok:         true,
-			wantIDs:    []string{userLocation},
+			wantIDs:    []string{"user-1"},
 			call: func(c *AdminAPIClient) ([]string, error) {
 				return c.UsersService().Create(context.Background(), &UserCreate{Username: "ada"})
 			},

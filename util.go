@@ -8,6 +8,8 @@ import (
 	"io"
 	"io/ioutil"
 	"net/http"
+	"net/url"
+	"path"
 	"strings"
 
 	"github.com/dgrijalva/jwt-go/v4"
@@ -28,13 +30,22 @@ func RequestBearerToken(request *http.Request) (string, bool) {
 
 func parseResponseLocations(resp *http.Response) ([]string, error) {
 	locations, ok := resp.Header[httpHeaderLocationKey]
-	if !ok {
+	if !ok || len(locations) == 0 {
 		return nil, errors.New("unable to locate new id in response")
 	}
-	if ll := len(locations); ll == 0 {
-		return nil, errors.New("unable to locate new id in response")
+	ids := make([]string, len(locations))
+	for i, location := range locations {
+		u, err := url.Parse(location)
+		if err != nil {
+			return nil, errors.New("unable to locate new id in response")
+		}
+		id := path.Base(u.Path)
+		if id == "" || id == "." || id == ".." || id == "/" {
+			return nil, errors.New("unable to locate new id in response")
+		}
+		ids[i] = id
 	}
-	return locations, nil
+	return ids, nil
 }
 
 func ClaimsSource(claims jwt.Claims) (string, string, error) {
