@@ -103,6 +103,10 @@ func (cs *AdminClientsService) CreateAndGet(ctx context.Context, body *ClientCre
 }
 
 func (cs *AdminClientsService) Update(ctx context.Context, client *Client, mutators ...APIRequestMutator) error {
+	// Client GET/PUT round-trips protocol mappers through ClientProtocolMapperConfig.
+	// Fill any User Session Note mapper that lost user.session.note before writing it back.
+	RepairUserSessionNoteMappers(client.ProtocolMappers)
+
 	resp, err := cs.c.callAdminRealms(
 		ctx,
 		http.MethodPut,

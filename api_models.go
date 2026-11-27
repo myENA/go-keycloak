@@ -65,6 +65,10 @@ type ClientProtocolMapperConfig struct {
 	JSONTypeLabel      string `json:"jsonType.label"`
 	UserAttribute      string `json:"user.attribute"`
 	UserInfoTokenClaim string `json:"userinfo.token.claim"`
+	// UserSessionNote is the Keycloak "User Session Note" value (config key user.session.note).
+	// omitempty keeps the key off mappers that do not use it; an empty value must not be written
+	// or token issuance NPEs inside oidc-usersessionmodel-note-mapper.
+	UserSessionNote string `json:"user.session.note,omitempty"`
 }
 
 type ClientProtocolMapper struct {
